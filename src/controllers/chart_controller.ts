@@ -4,6 +4,7 @@ import {
   MAX_SERIES,
   formatDay,
   localDateString,
+  renderHabitStrip,
   renderPanelChart,
   seriesClass,
   stackedDailyTotals,
@@ -22,7 +23,7 @@ export default class ChartController extends Controller {
   declare readonly headingTarget: HTMLElement
 
   private activities: Activity[] = []
-  private series: { name: string; unit: string }[] = []
+  private series: { name: string; unit: string; kind: string }[] = []
   private days: StackedDay[] = []
 
   connect() {
@@ -68,8 +69,8 @@ export default class ChartController extends Controller {
     const slotFor = new Map(this.activities.map((activity, i) => [activity.id, Math.min(i, MAX_SERIES)]))
     this.series = this.activities
       .slice(0, MAX_SERIES)
-      .map((activity) => ({ name: activity.name, unit: activity.unit }))
-    if (hasOther) this.series.push({ name: 'Other', unit: '' }) // mixed units — leave unlabeled
+      .map((activity) => ({ name: activity.name, unit: activity.unit, kind: activity.kind }))
+    if (hasOther) this.series.push({ name: 'Other', unit: '', kind: 'exercise' }) // mixed — leave unlabeled
 
     const rows = ((data ?? []) as { amount: number; created_at: string; activity_id: string }[]).map(
       (row) => ({ amount: row.amount, created_at: row.created_at, series: slotFor.get(row.activity_id) ?? -1 }),
@@ -82,11 +83,13 @@ export default class ChartController extends Controller {
 
     // one panel per activity with data, each on its own scale
     const active = this.series
-      .map(({ name, unit }, s) => ({
+      .map(({ name, unit, kind }, s) => ({
         name,
         unit,
+        kind,
         s,
         total: this.days.reduce((sum, day) => sum + day.values[s], 0),
+        daysDone: this.days.filter((day) => day.values[s] > 0).length,
       }))
       .filter((series) => series.total > 0)
 
@@ -99,7 +102,7 @@ export default class ChartController extends Controller {
     }
 
     this.containerTarget.replaceChildren(
-      ...active.map(({ name, unit, s, total }, i) => {
+      ...active.map(({ name, unit, kind, s, total, daysDone }, i) => {
         const panel = document.createElement('div')
         panel.className = 'panel'
 
@@ -112,18 +115,22 @@ export default class ChartController extends Controller {
         title.textContent = name // user-named — textContent, never innerHTML
         const sum = document.createElement('span')
         sum.className = 'panel-total muted'
-        sum.textContent = `${total}${unit ? ` ${unit}` : ''} in ${this.days.length} days`
+        sum.textContent =
+          kind === 'habit'
+            ? `${daysDone} of ${this.days.length} days`
+            : `${total}${unit ? ` ${unit}` : ''} in ${this.days.length} days`
         head.append(swatch, title, sum)
 
         const chart = document.createElement('div')
         chart.className = 'panel-chart'
         chart.dataset.series = String(s)
+        const perDay = this.days.map((day) => ({ date: day.date, total: day.values[s] }))
+        const showDates = i === active.length - 1 // date labels only on the bottom panel; x is shared
         // svg markup is built from numbers and locale date strings only — no user content
-        chart.innerHTML = renderPanelChart(
-          this.days.map((day) => ({ date: day.date, total: day.values[s] })),
-          seriesClass(s),
-          i === active.length - 1, // date labels only on the bottom panel; x is shared
-        )
+        chart.innerHTML =
+          kind === 'habit'
+            ? renderHabitStrip(perDay, seriesClass(s), showDates)
+            : renderPanelChart(perDay, seriesClass(s), showDates)
 
         panel.append(head, chart)
         return panel
@@ -160,8 +167,12 @@ export default class ChartController extends Controller {
     }
 
     const isToday = day.date === localDateString(new Date())
-    const unit = this.series[series]?.unit
-    this.tooltipTarget.textContent = `${isToday ? 'Today' : formatDay(day.date)} · ${day.values[series]}${unit ? ` ${unit}` : ''}`
+    const dayLabel = isToday ? 'Today' : formatDay(day.date)
+    const { unit, kind } = this.series[series] ?? { unit: '', kind: 'exercise' }
+    this.tooltipTarget.textContent =
+      kind === 'habit'
+        ? `${dayLabel} · ${day.values[series] > 0 ? 'done ✓' : 'not done'}`
+        : `${dayLabel} · ${day.values[series]}${unit ? ` ${unit}` : ''}`
 
     const wrapRect = this.tooltipTarget.parentElement!.getBoundingClientRect()
     const slotRect = hit.getBoundingClientRect()

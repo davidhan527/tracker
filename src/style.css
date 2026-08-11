@@ -206,6 +206,16 @@ button.quick {
   margin-bottom: 0;
 }
 
+.inline-form .grow {
+  flex: 1;
+}
+
+.habit-mark {
+  width: 100%;
+  min-height: 3.4rem;
+  font-size: 1.05rem;
+}
+
 .status {
   min-height: 1.2rem;
   margin: 0.6rem 0 0;
@@ -382,6 +392,11 @@ button.quick {
 
 .chart-hit {
   fill: transparent;
+}
+
+.chart-miss {
+  fill: var(--border);
+  opacity: 0.55;
 }
 
 .chart-tooltip {

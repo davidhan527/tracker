@@ -5,6 +5,7 @@ create table public.activities (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
   unit text not null default 'reps' check (char_length(unit) between 1 and 20),
+  kind text not null default 'exercise' check (kind in ('exercise', 'book', 'habit')),
   created_at timestamptz not null default now(),
   unique (user_id, name)
 );
@@ -42,6 +43,10 @@ create policy "own entries delete" on public.entries for delete using (auth.uid(
 --
 -- If the unit column was never added:
 -- alter table public.activities add column unit text not null default 'reps' check (char_length(unit) between 1 and 20);
+--
+-- Kind column (added 2026-08; existing rows default to exercise — update books by hand):
+-- alter table public.activities add column kind text not null default 'exercise' check (kind in ('exercise', 'book', 'habit'));
+-- update public.activities set kind = 'book' where unit = 'pages';
 --
 -- Optional cosmetic cleanup (policy names keep working either way):
 -- alter policy "own exercises select" on public.activities rename to "own activities select";

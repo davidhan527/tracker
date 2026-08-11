@@ -1,9 +1,10 @@
 import { Controller } from '@hotwired/stimulus'
-import { seriesClass } from '../lib/chart'
+import { localDateString, seriesClass } from '../lib/chart'
 import { supabase } from '../lib/supabase'
 import type { Activity, Entry } from '../types'
 
 const RECENT_LIMIT = 20
+const STREAK_WINDOW = 30
 
 export default class HistoryController extends Controller {
   static targets = ['today', 'grandTotal', 'list', 'empty']
@@ -45,7 +46,7 @@ export default class HistoryController extends Controller {
 
   private async refresh() {
     if (this.activities.length === 0) {
-      this.renderToday(new Map(), new Map())
+      this.renderToday(new Map(), new Map(), new Map())
       this.renderList([])
       return
     }
@@ -54,12 +55,15 @@ export default class HistoryController extends Controller {
     startOfToday.setHours(0, 0, 0, 0)
     const startOfYesterday = new Date(startOfToday)
     startOfYesterday.setDate(startOfYesterday.getDate() - 1)
+    // wide window so habit streaks can be counted, not just today/yesterday
+    const windowStart = new Date(startOfToday)
+    windowStart.setDate(windowStart.getDate() - (STREAK_WINDOW - 1))
 
-    const [twoDays, recent] = await Promise.all([
+    const [window, recent] = await Promise.all([
       supabase
         .from('entries')
         .select('amount, activity_id, created_at')
-        .gte('created_at', startOfYesterday.toISOString()),
+        .gte('created_at', windowStart.toISOString()),
       supabase
         .from('entries')
         .select('id, activity_id, amount, created_at')
@@ -69,16 +73,28 @@ export default class HistoryController extends Controller {
 
     const byToday = new Map<string, number>()
     const byYesterday = new Map<string, number>()
-    for (const row of (twoDays.data ?? []) as Pick<Entry, 'amount' | 'activity_id' | 'created_at'>[]) {
-      const bucket = new Date(row.created_at) >= startOfToday ? byToday : byYesterday
-      bucket.set(row.activity_id, (bucket.get(row.activity_id) ?? 0) + row.amount)
+    const daysDone = new Map<string, Set<string>>()
+    for (const row of (window.data ?? []) as Pick<Entry, 'amount' | 'activity_id' | 'created_at'>[]) {
+      const when = new Date(row.created_at)
+      if (when >= startOfToday) {
+        byToday.set(row.activity_id, (byToday.get(row.activity_id) ?? 0) + row.amount)
+      } else if (when >= startOfYesterday) {
+        byYesterday.set(row.activity_id, (byYesterday.get(row.activity_id) ?? 0) + row.amount)
+      }
+      let days = daysDone.get(row.activity_id)
+      if (!days) daysDone.set(row.activity_id, (days = new Set()))
+      days.add(localDateString(when))
     }
-    this.renderToday(byToday, byYesterday)
+    this.renderToday(byToday, byYesterday, daysDone)
     this.renderList((recent.data ?? []) as Entry[])
   }
 
   // per-activity totals are the headline; the cross-activity sum is a small corner note
-  private renderToday(byToday: Map<string, number>, byYesterday: Map<string, number>) {
+  private renderToday(
+    byToday: Map<string, number>,
+    byYesterday: Map<string, number>,
+    daysDone: Map<string, Set<string>>,
+  ) {
     if (this.activities.length === 0) {
       this.todayTarget.replaceChildren()
       this.grandTotalTarget.hidden = true
@@ -89,13 +105,19 @@ export default class HistoryController extends Controller {
       ...this.activities.map((activity, i) => {
         const today = byToday.get(activity.id) ?? 0
         const yesterday = byYesterday.get(activity.id) ?? 0
+        const isHabit = activity.kind === 'habit'
 
         const row = document.createElement('div')
         row.className = 'today-row'
         const count = document.createElement('span')
         count.className = 'today-count'
-        count.textContent = String(today)
-        count.style.color = progressColor(today, yesterday)
+        if (isHabit) {
+          count.textContent = today > 0 ? '✓' : '—'
+          count.style.color = today > 0 ? 'var(--progress-beat)' : 'var(--progress-zero)'
+        } else {
+          count.textContent = String(today)
+          count.style.color = progressColor(today, yesterday)
+        }
         const name = document.createElement('span')
         name.className = 'today-name'
         const swatch = document.createElement('span')
@@ -103,23 +125,27 @@ export default class HistoryController extends Controller {
         const text = document.createElement('span')
         text.textContent = activity.name // user-named — textContent, never innerHTML
         name.append(swatch, text)
-        if (activity.unit !== 'reps') {
+        if (!isHabit && activity.unit !== 'reps') {
           const unit = document.createElement('span')
           unit.className = 'muted small'
           unit.textContent = activity.unit
           name.append(unit)
         }
-        row.append(count, name, deltaLabel(today, yesterday))
+        const delta = isHabit
+          ? streakLabel(daysDone.get(activity.id) ?? new Set(), today > 0)
+          : deltaLabel(today, yesterday)
+        row.append(count, name, delta)
         return row
       }),
     )
 
-    // summing across units is meaningless, so the corner total groups by unit
+    // summing across units is meaningless, so the corner total groups by unit;
+    // habits are yes/no, not amounts, so they stay out of the sum
     const byUnit = new Map<string, number>()
     let active = 0
     for (const activity of this.activities) {
       const total = byToday.get(activity.id) ?? 0
-      if (total === 0) continue
+      if (total === 0 || activity.kind === 'habit') continue
       active++
       byUnit.set(activity.unit, (byUnit.get(activity.unit) ?? 0) + total)
     }
@@ -141,9 +167,11 @@ export default class HistoryController extends Controller {
     label.className = 'entry-label'
     const activity = this.byId.get(entry.activity_id)
     label.textContent =
-      activity && activity.unit !== 'reps'
-        ? `${entry.amount} ${activity.unit} · ${activity.name}`
-        : `${entry.amount} × ${activity?.name ?? '?'}`
+      activity?.kind === 'habit'
+        ? `✓ ${activity.name}`
+        : activity && activity.unit !== 'reps'
+          ? `${entry.amount} ${activity.unit} · ${activity.name}`
+          : `${entry.amount} × ${activity?.name ?? '?'}`
 
     const time = document.createElement('time')
     time.className = 'muted'
@@ -176,6 +204,30 @@ function progressColor(today: number, yesterday: number): string {
   if (today === yesterday) return 'var(--progress-match)'
   const excess = yesterday === 0 ? 1 : Math.min((today - yesterday) / yesterday, 1)
   return `color-mix(in oklab, var(--progress-beat-deep) ${Math.round(excess * 100)}%, var(--progress-beat))`
+}
+
+// habit motivation is the streak: growing when done today, "on the line" when not
+function streakLabel(daysDone: Set<string>, doneToday: boolean): HTMLElement {
+  const label = document.createElement('span')
+  label.className = 'today-delta'
+
+  let streak = 0
+  const cursor = new Date()
+  if (!doneToday) cursor.setDate(cursor.getDate() - 1)
+  while (daysDone.has(localDateString(cursor))) {
+    streak++
+    cursor.setDate(cursor.getDate() - 1)
+  }
+
+  if (doneToday) {
+    label.classList.add('up')
+    label.textContent = streak > 1 ? `${streak}-day streak` : 'done today'
+  } else if (streak > 0) {
+    label.textContent = streak > 1 ? `${streak}-day streak on the line` : 'done yesterday'
+  } else {
+    label.textContent = ''
+  }
+  return label
 }
 
 // goal-framed: behind reads as a target to chase, never a deficit

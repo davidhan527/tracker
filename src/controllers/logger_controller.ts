@@ -4,14 +4,17 @@ import { supabase } from '../lib/supabase'
 import type { Activity } from '../types'
 
 export default class LoggerController extends Controller {
-  static targets = ['picker', 'input', 'status', 'details', 'date']
+  static targets = ['picker', 'input', 'status', 'details', 'date', 'counted', 'habitButton']
 
   declare readonly inputTarget: HTMLInputElement
   declare readonly statusTarget: HTMLElement
   declare readonly detailsTarget: HTMLDetailsElement
   declare readonly dateTarget: HTMLInputElement
+  declare readonly countedTarget: HTMLElement
+  declare readonly habitButtonTarget: HTMLButtonElement
 
   private activityId: string | null = null
+  private isHabit = false
 
   connect() {
     window.addEventListener('activities:changed', this.onActivities)
@@ -42,10 +45,42 @@ export default class LoggerController extends Controller {
   private onActivities = (event: Event) => {
     const detail = (event as CustomEvent<{ activities: Activity[]; selectedId: string | null }>).detail
     this.activityId = detail.selectedId
-    const unit = detail.activities.find((activity) => activity.id === this.activityId)?.unit ?? 'reps'
+    const activity = detail.activities.find((candidate) => candidate.id === this.activityId)
+    this.isHabit = activity?.kind === 'habit'
+    this.countedTarget.hidden = this.isHabit
+    this.habitButtonTarget.hidden = !this.isHabit
+    const unit = activity?.unit ?? 'reps'
     const label = unit.charAt(0).toUpperCase() + unit.slice(1)
     this.inputTarget.placeholder = label
     this.inputTarget.setAttribute('aria-label', label)
+  }
+
+  // habits are yes/no per day: at most one entry, so marking twice is a no-op
+  async markDone() {
+    if (!this.activityId) return
+    const day = this.dateTarget.value || localDateString(new Date())
+    const [year, month, dayOfMonth] = day.split('-').map(Number)
+    const dayStart = new Date(year, month - 1, dayOfMonth)
+    const dayEnd = new Date(year, month - 1, dayOfMonth + 1)
+
+    this.setBusy(true)
+    const existing = await supabase
+      .from('entries')
+      .select('id')
+      .eq('activity_id', this.activityId)
+      .gte('created_at', dayStart.toISOString())
+      .lt('created_at', dayEnd.toISOString())
+      .limit(1)
+    if ((existing.data ?? []).length > 0) {
+      this.setBusy(false)
+      this.statusTarget.textContent = `Already marked for ${this.dateTarget.value ? day : 'today'} ✓`
+      return
+    }
+    this.setBusy(false)
+
+    if (await this.log(1)) {
+      this.statusTarget.textContent = this.dateTarget.value ? `Marked ${day} done ✓` : 'Done ✓'
+    }
   }
 
   private async log(amount: number): Promise<boolean> {

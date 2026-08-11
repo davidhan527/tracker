@@ -1,7 +1,8 @@
 export interface Activity {
   id: string
   name: string
-  unit: string // 'reps', 'pages', 'minutes', …
+  unit: string // 'reps', 'pages', 'minutes', …; 'days' for habits
+  kind: string // 'exercise' | 'book' | 'habit' (habit = yes/no per day)
   created_at: string
 }
 

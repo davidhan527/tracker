@@ -80,6 +80,50 @@ export function dayTotal(day: StackedDay): number {
   return day.values.reduce((sum, v) => sum + v, 0)
 }
 
+// habit-tracker strip: one square per day, filled when done — no magnitude axis
+const STRIP_TOP = 8
+const STRIP_BOTTOM = 34
+
+export function renderHabitStrip(
+  days: { date: string; total: number }[],
+  seriesCls: string,
+  showDates: boolean,
+): string {
+  const height = showDates ? STRIP_BOTTOM + DATE_ROW + 4 : STRIP_BOTTOM + 4
+  const slot = (RIGHT - LEFT) / days.length
+  const size = Math.min(24, slot - BAR_GAP)
+  const tickStep = days.length >= 21 ? 7 : days.length >= 10 ? 3 : 1
+
+  const parts: string[] = []
+
+  days.forEach((day, i) => {
+    const cx = LEFT + slot * i + slot / 2
+    const x = (cx - size / 2).toFixed(2)
+    const cls = day.total > 0 ? `chart-bar ${seriesCls}` : 'chart-miss'
+    parts.push(
+      `<rect class="${cls}" data-index="${i}" x="${x}" y="${STRIP_TOP}" width="${size.toFixed(2)}" height="${STRIP_BOTTOM - STRIP_TOP}" rx="6"/>`,
+    )
+    if (showDates && (days.length - 1 - i) % tickStep === 0) {
+      const atEdge = cx > RIGHT - 16
+      parts.push(
+        `<text class="chart-tick" x="${(atEdge ? RIGHT : cx).toFixed(2)}" y="${STRIP_BOTTOM + 13}" text-anchor="${atEdge ? 'end' : 'middle'}">${formatDay(day.date)}</text>`,
+      )
+    }
+  })
+
+  // hover targets on top so they win pointer events
+  days.forEach((_, i) => {
+    parts.push(
+      `<rect class="chart-hit" data-index="${i}" x="${(LEFT + slot * i).toFixed(2)}" y="${STRIP_TOP}" width="${slot.toFixed(2)}" height="${STRIP_BOTTOM - STRIP_TOP}"/>`,
+    )
+  })
+
+  const done = days.filter((day) => day.total > 0).length
+  const label = `Days done over the last ${days.length} days: ${done} of ${days.length}.`
+
+  return `<svg viewBox="0 0 ${WIDTH} ${height}" role="img" aria-label="${label}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`
+}
+
 // one activity's window on its own y-scale, so its trend reads relative to itself
 export function renderPanelChart(
   days: { date: string; total: number }[],
