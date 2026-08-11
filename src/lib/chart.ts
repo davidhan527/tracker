@@ -3,15 +3,20 @@ export interface StackedDay {
   values: number[] // reps per series, aligned to the caller's series order
 }
 
-// geometry in viewBox units; rendered ~1:1 at the app's max card width
+export const MAX_SERIES = 6 // palette slots; exercises beyond this fold into "Other"
+
+export function seriesClass(index: number): string {
+  return index < MAX_SERIES ? `chart-s${index + 1}` : 'chart-s-other'
+}
+
+// panel geometry in viewBox units; rendered ~1:1 at the app's max card width
 const WIDTH = 400
-const HEIGHT = 180
 const TOP = 16
-const BOTTOM = HEIGHT - 20
+const BOTTOM = 56
 const LEFT = 30
 const RIGHT = WIDTH - 6
+const DATE_ROW = 16
 const BAR_GAP = 2.5
-const SEGMENT_GAP = 2
 const CORNER = 3
 
 export function localDateString(date: Date): string {
@@ -75,53 +80,38 @@ export function dayTotal(day: StackedDay): number {
   return day.values.reduce((sum, v) => sum + v, 0)
 }
 
-export function renderStackedChart(days: StackedDay[], seriesClasses: string[]): string {
-  const totals = days.map(dayTotal)
-  const axisMax = niceMax(Math.max(...totals))
-  const plotWidth = RIGHT - LEFT
+// one exercise's 30 days on its own y-scale, so its trend reads relative to itself
+export function renderPanelChart(
+  days: { date: string; total: number }[],
+  seriesCls: string,
+  showDates: boolean,
+): string {
+  const height = showDates ? BOTTOM + DATE_ROW + 4 : BOTTOM + 4
+  const axisMax = niceMax(Math.max(...days.map((d) => d.total)))
   const plotHeight = BOTTOM - TOP
-  const slot = plotWidth / days.length
+  const slot = (RIGHT - LEFT) / days.length
   const barWidth = Math.min(24, slot - BAR_GAP)
   const scale = plotHeight / axisMax
 
   const parts: string[] = []
 
-  for (const tick of [axisMax / 2, axisMax]) {
-    const y = (BOTTOM - tick * scale).toFixed(2)
-    parts.push(`<line class="chart-grid" x1="${LEFT}" y1="${y}" x2="${RIGHT}" y2="${y}"/>`)
-    parts.push(`<text class="chart-tick" x="${LEFT - 5}" y="${y}" dy="3" text-anchor="end">${tick}</text>`)
-  }
+  // per-panel scale: the max tick makes each panel's own yardstick explicit
+  parts.push(`<line class="chart-grid" x1="${LEFT}" y1="${TOP}" x2="${RIGHT}" y2="${TOP}"/>`)
+  parts.push(`<text class="chart-tick" x="${LEFT - 5}" y="${TOP}" dy="3" text-anchor="end">${axisMax}</text>`)
   parts.push(`<line class="chart-grid" x1="${LEFT}" y1="${BOTTOM}" x2="${RIGHT}" y2="${BOTTOM}"/>`)
 
-  const peak = totals.reduce((best, total, i) => (total > totals[best] ? i : best), 0)
+  const peak = days.reduce((best, d, i) => (d.total > days[best].total ? i : best), 0)
 
   days.forEach((day, i) => {
     const cx = LEFT + slot * i + slot / 2
-    const x = cx - barWidth / 2
-    const topIndex = day.values.reduce((last, v, s) => (v > 0 ? s : last), -1)
-
-    let bottom = BOTTOM
-    day.values.forEach((value, s) => {
-      if (value <= 0) return
-      const isBottom = bottom === BOTTOM
-      const top = bottom - value * scale
-      // 2px surface gap separates stacked segments; upper segments give it up from their base
-      const drawnBottom = isBottom ? bottom : bottom - SEGMENT_GAP
-      const drawnTop = Math.min(top, drawnBottom - 1)
-      if (s === topIndex) {
-        parts.push(
-          `<path class="chart-bar ${seriesClasses[s]}" data-index="${i}" d="${topRoundedPath(x, drawnTop, barWidth, drawnBottom)}"/>`,
-        )
-      } else {
-        parts.push(
-          `<rect class="chart-bar ${seriesClasses[s]}" data-index="${i}" x="${x.toFixed(2)}" y="${drawnTop.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${(drawnBottom - drawnTop).toFixed(2)}"/>`,
-        )
-      }
-      bottom = top
-    })
-
+    if (day.total > 0) {
+      const top = BOTTOM - day.total * scale
+      parts.push(
+        `<path class="chart-bar ${seriesCls}" data-index="${i}" d="${topRoundedPath(cx - barWidth / 2, top, barWidth, BOTTOM)}"/>`,
+      )
+    }
     // label roughly weekly, anchored so the newest day is always labeled
-    if ((days.length - 1 - i) % 7 === 0) {
+    if (showDates && (days.length - 1 - i) % 7 === 0) {
       // right-anchor the newest label so it doesn't clip at the viewBox edge
       const atEdge = cx > RIGHT - 16
       parts.push(
@@ -130,11 +120,11 @@ export function renderStackedChart(days: StackedDay[], seriesClasses: string[]):
     }
   })
 
-  if (totals[peak] > 0) {
+  if (days[peak].total > 0) {
     const cx = LEFT + slot * peak + slot / 2
     const anchor = peak < 2 ? 'start' : peak > days.length - 3 ? 'end' : 'middle'
     parts.push(
-      `<text class="chart-peak" x="${cx.toFixed(2)}" y="${(BOTTOM - totals[peak] * scale - 5).toFixed(2)}" text-anchor="${anchor}">${totals[peak]}</text>`,
+      `<text class="chart-peak" x="${cx.toFixed(2)}" y="${(BOTTOM - days[peak].total * scale - 4).toFixed(2)}" text-anchor="${anchor}">${days[peak].total}</text>`,
     )
   }
 
@@ -145,8 +135,8 @@ export function renderStackedChart(days: StackedDay[], seriesClasses: string[]):
     )
   })
 
-  const grand = totals.reduce((sum, t) => sum + t, 0)
-  const label = `Daily reps across exercises over the last ${days.length} days. Total ${grand}. Best day ${formatDay(days[peak].date)} with ${totals[peak]}.`
+  const total = days.reduce((sum, d) => sum + d.total, 0)
+  const label = `Daily reps over the last ${days.length} days. Total ${total}. Best day ${formatDay(days[peak].date)} with ${days[peak].total}.`
 
-  return `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${label}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`
+  return `<svg viewBox="0 0 ${WIDTH} ${height}" role="img" aria-label="${label}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`
 }

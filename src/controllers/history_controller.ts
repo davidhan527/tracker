@@ -1,14 +1,15 @@
 import { Controller } from '@hotwired/stimulus'
+import { seriesClass } from '../lib/chart'
 import { supabase } from '../lib/supabase'
 import type { Entry, Exercise } from '../types'
 
 const RECENT_LIMIT = 20
 
 export default class HistoryController extends Controller {
-  static targets = ['todayTotal', 'breakdown', 'list', 'empty']
+  static targets = ['today', 'grandTotal', 'list', 'empty']
 
-  declare readonly todayTotalTarget: HTMLElement
-  declare readonly breakdownTarget: HTMLElement
+  declare readonly todayTarget: HTMLElement
+  declare readonly grandTotalTarget: HTMLElement
   declare readonly listTarget: HTMLUListElement
   declare readonly emptyTarget: HTMLElement
 
@@ -44,8 +45,7 @@ export default class HistoryController extends Controller {
 
   private async refresh() {
     if (this.exercises.length === 0) {
-      this.todayTotalTarget.textContent = '0'
-      this.breakdownTarget.textContent = ''
+      this.renderToday(new Map())
       this.renderList([])
       return
     }
@@ -65,21 +65,51 @@ export default class HistoryController extends Controller {
         .limit(RECENT_LIMIT),
     ])
 
-    const todayRows = (today.data ?? []) as Pick<Entry, 'reps' | 'exercise_id'>[]
-    const total = todayRows.reduce((sum, row) => sum + row.reps, 0)
-    this.todayTotalTarget.textContent = String(total)
-
     const byExercise = new Map<string, number>()
-    for (const row of todayRows) {
+    for (const row of (today.data ?? []) as Pick<Entry, 'reps' | 'exercise_id'>[]) {
       byExercise.set(row.exercise_id, (byExercise.get(row.exercise_id) ?? 0) + row.reps)
     }
-    // list in exercise order so the breakdown is stable across refreshes
-    this.breakdownTarget.textContent = this.exercises
-      .filter((exercise) => (byExercise.get(exercise.id) ?? 0) > 0)
-      .map((exercise) => `${byExercise.get(exercise.id)} ${exercise.name}`)
-      .join(' · ')
-
+    this.renderToday(byExercise)
     this.renderList((recent.data ?? []) as Entry[])
+  }
+
+  // per-exercise totals are the headline; the cross-exercise sum is a small corner note
+  private renderToday(byExercise: Map<string, number>) {
+    const active = this.exercises
+      .map((exercise, i) => ({ exercise, i, total: byExercise.get(exercise.id) ?? 0 }))
+      .filter(({ total }) => total > 0)
+
+    if (active.length === 0) {
+      const none = document.createElement('p')
+      none.className = 'muted'
+      none.textContent = 'No reps yet today.'
+      this.todayTarget.replaceChildren(none)
+      this.grandTotalTarget.hidden = true
+      return
+    }
+
+    this.todayTarget.replaceChildren(
+      ...active.map(({ exercise, i, total }) => {
+        const row = document.createElement('div')
+        row.className = 'today-row'
+        const count = document.createElement('span')
+        count.className = 'today-count'
+        count.textContent = String(total)
+        const name = document.createElement('span')
+        name.className = 'today-name'
+        const swatch = document.createElement('span')
+        swatch.className = `legend-swatch ${seriesClass(i)}`
+        const text = document.createElement('span')
+        text.textContent = exercise.name // user-named — textContent, never innerHTML
+        name.append(swatch, text)
+        row.append(count, name)
+        return row
+      }),
+    )
+
+    const grand = active.reduce((sum, { total }) => sum + total, 0)
+    this.grandTotalTarget.textContent = `${grand} total`
+    this.grandTotalTarget.hidden = active.length < 2
   }
 
   private renderList(entries: Entry[]) {

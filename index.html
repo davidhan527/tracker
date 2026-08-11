@@ -84,15 +84,14 @@
           <div data-chart-target="container"></div>
           <div class="chart-tooltip" data-chart-target="tooltip" hidden></div>
         </div>
-        <div class="chart-legend" data-chart-target="legend" hidden></div>
       </section>
 
       <section class="card" data-controller="history">
-        <div class="today">
-          <span class="today-count" data-history-target="todayTotal">0</span>
-          <span class="muted">reps today</span>
+        <div class="card-head">
+          <h2>Today</h2>
+          <span class="muted small" data-history-target="grandTotal" hidden></span>
         </div>
-        <p class="muted small" data-history-target="breakdown"></p>
+        <div class="today-rows" data-history-target="today"></div>
         <h2>Recent</h2>
         <ul class="entries" data-history-target="list"></ul>
         <p class="muted" data-history-target="empty">Nothing logged yet.</p>
