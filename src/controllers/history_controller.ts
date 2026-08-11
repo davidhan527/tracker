@@ -144,18 +144,19 @@ export default class HistoryController extends Controller {
   }
 }
 
-// yellow at 0 → blue when matching yesterday → green as yesterday is beaten (full at 2×);
-// mixed in OKLab so the ramp stays perceptually even, and resolved from CSS vars so
-// both themes get their own contrast-checked endpoints
+// yellow at 0 → blue when matching yesterday → green the moment yesterday is beaten,
+// deepening with the margin (full depth at 2×); mixed in OKLab so the ramp stays
+// perceptually even, and resolved from CSS vars so both themes get their own
+// contrast-checked endpoints
 function progressColor(today: number, yesterday: number): string {
   if (today === 0) return 'var(--progress-zero)'
-  if (yesterday === 0) return 'var(--progress-beat)'
-  const ratio = today / yesterday
-  if (ratio < 1) {
+  if (today < yesterday) {
+    const ratio = today / yesterday
     return `color-mix(in oklab, var(--progress-match) ${Math.round(ratio * 100)}%, var(--progress-zero))`
   }
-  const excess = Math.min(ratio - 1, 1)
-  return `color-mix(in oklab, var(--progress-beat) ${Math.round(excess * 100)}%, var(--progress-match))`
+  if (today === yesterday) return 'var(--progress-match)'
+  const excess = yesterday === 0 ? 1 : Math.min((today - yesterday) / yesterday, 1)
+  return `color-mix(in oklab, var(--progress-beat-deep) ${Math.round(excess * 100)}%, var(--progress-beat))`
 }
 
 // goal-framed: behind reads as a target to chase, never a deficit

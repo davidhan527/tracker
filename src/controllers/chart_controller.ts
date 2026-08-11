@@ -11,13 +11,15 @@ import {
 } from '../lib/chart'
 import type { Exercise } from '../types'
 
-const DAYS = 30
+const MAX_DAYS = 30
+const MIN_DAYS = 7
 
 export default class ChartController extends Controller {
-  static targets = ['container', 'tooltip']
+  static targets = ['container', 'tooltip', 'heading']
 
   declare readonly containerTarget: HTMLElement
   declare readonly tooltipTarget: HTMLElement
+  declare readonly headingTarget: HTMLElement
 
   private exercises: Exercise[] = []
   private seriesNames: string[] = []
@@ -54,7 +56,7 @@ export default class ChartController extends Controller {
     }
 
     const today = new Date()
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (DAYS - 1))
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (MAX_DAYS - 1))
     const { data, error } = await supabase
       .from('entries')
       .select('reps, created_at, exercise_id')
@@ -70,7 +72,11 @@ export default class ChartController extends Controller {
     const rows = ((data ?? []) as { reps: number; created_at: string; exercise_id: string }[]).map(
       (row) => ({ reps: row.reps, created_at: row.created_at, series: slotFor.get(row.exercise_id) ?? -1 }),
     )
-    this.days = stackedDailyTotals(rows, this.seriesNames.length, DAYS, today)
+
+    // window grows with history (7 → 30 days) so young data isn't lost in empty space
+    const days = this.windowFor(rows, today)
+    this.headingTarget.textContent = `Last ${days} days`
+    this.days = stackedDailyTotals(rows, this.seriesNames.length, days, today)
 
     // one panel per exercise with activity, each on its own scale
     const active = this.seriesNames
@@ -80,7 +86,7 @@ export default class ChartController extends Controller {
     if (active.length === 0) {
       const empty = document.createElement('p')
       empty.className = 'muted'
-      empty.textContent = `No reps in the last ${DAYS} days.`
+      empty.textContent = `No reps in the last ${MAX_DAYS} days.`
       this.containerTarget.replaceChildren(empty)
       return
     }
@@ -99,7 +105,7 @@ export default class ChartController extends Controller {
         title.textContent = name // user-named — textContent, never innerHTML
         const sum = document.createElement('span')
         sum.className = 'panel-total muted'
-        sum.textContent = `${total} in ${DAYS} days`
+        sum.textContent = `${total} in ${this.days.length} days`
         head.append(swatch, title, sum)
 
         const chart = document.createElement('div')
@@ -149,6 +155,17 @@ export default class ChartController extends Controller {
     )
     this.tooltipTarget.style.left = `${clamped}px`
     this.tooltipTarget.style.top = `${Math.max(panelRect.top - wrapRect.top - this.tooltipTarget.offsetHeight - 2, 0)}px`
+  }
+
+  private windowFor(rows: { created_at: string }[], today: Date): number {
+    if (rows.length === 0) return MAX_DAYS
+    const earliest = rows.reduce(
+      (min, row) => Math.min(min, new Date(row.created_at).getTime()),
+      Infinity,
+    )
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const span = Math.floor((startOfToday.getTime() - earliest) / 86_400_000) + 1
+    return Math.min(Math.max(span, MIN_DAYS), MAX_DAYS)
   }
 
   private hideTooltip = () => {

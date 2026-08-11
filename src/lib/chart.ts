@@ -12,7 +12,7 @@ export function seriesClass(index: number): string {
 // panel geometry in viewBox units; rendered ~1:1 at the app's max card width
 const WIDTH = 400
 const TOP = 16
-const BOTTOM = 56
+const BOTTOM = 80
 const LEFT = 30
 const RIGHT = WIDTH - 6
 const DATE_ROW = 16
@@ -101,6 +101,8 @@ export function renderPanelChart(
   parts.push(`<line class="chart-grid" x1="${LEFT}" y1="${BOTTOM}" x2="${RIGHT}" y2="${BOTTOM}"/>`)
 
   const peak = days.reduce((best, d, i) => (d.total > days[best].total ? i : best), 0)
+  // tick cadence tracks the window: weekly at 21+, every 3rd day at 10+, daily below
+  const tickStep = days.length >= 21 ? 7 : days.length >= 10 ? 3 : 1
 
   days.forEach((day, i) => {
     const cx = LEFT + slot * i + slot / 2
@@ -110,8 +112,8 @@ export function renderPanelChart(
         `<path class="chart-bar ${seriesCls}" data-index="${i}" d="${topRoundedPath(cx - barWidth / 2, top, barWidth, BOTTOM)}"/>`,
       )
     }
-    // label roughly weekly, anchored so the newest day is always labeled
-    if (showDates && (days.length - 1 - i) % 7 === 0) {
+    // anchored from the newest day, so today is always labeled
+    if (showDates && (days.length - 1 - i) % tickStep === 0) {
       // right-anchor the newest label so it doesn't clip at the viewBox edge
       const atEdge = cx > RIGHT - 16
       parts.push(
@@ -120,13 +122,16 @@ export function renderPanelChart(
     }
   })
 
-  if (days[peak].total > 0) {
-    const cx = LEFT + slot * peak + slot / 2
-    const anchor = peak < 2 ? 'start' : peak > days.length - 3 ? 'end' : 'middle'
-    parts.push(
-      `<text class="chart-peak" x="${cx.toFixed(2)}" y="${(BOTTOM - days[peak].total * scale - 4).toFixed(2)}" text-anchor="${anchor}">${days[peak].total}</text>`,
-    )
+  const valueLabel = (index: number) => {
+    const cx = LEFT + slot * index + slot / 2
+    const anchor = index < 2 ? 'start' : index > days.length - 3 ? 'end' : 'middle'
+    return `<text class="chart-peak" x="${cx.toFixed(2)}" y="${(BOTTOM - days[index].total * scale - 4).toFixed(2)}" text-anchor="${anchor}">${days[index].total}</text>`
   }
+
+  if (days[peak].total > 0) parts.push(valueLabel(peak))
+  // emphasize the newest bar too, unless the peak label already sits at the edge
+  const last = days.length - 1
+  if (last !== peak && days[last].total > 0 && last - peak > 2) parts.push(valueLabel(last))
 
   // full-height hover targets, one per day slot
   days.forEach((_, i) => {

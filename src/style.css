@@ -21,7 +21,8 @@
   /* beat-yesterday ramp endpoints + delta text (contrast-checked per surface) */
   --progress-zero: #c98500;
   --progress-match: #2563eb;
-  --progress-beat: #008300;
+  --progress-beat: #109510;
+  --progress-beat-deep: #005a00;
   --delta-up: #006300;
 
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -53,6 +54,7 @@
     --progress-zero: #eda100;
     --progress-match: #3b82f6;
     --progress-beat: #0ca30c;
+    --progress-beat-deep: #3fdc3f;
     --delta-up: #0ca30c;
   }
 }
