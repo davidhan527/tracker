@@ -18,6 +18,12 @@
   --series-6: #008300;
   --series-other: #6b7280;
 
+  /* beat-yesterday ramp endpoints + delta text (contrast-checked per surface) */
+  --progress-zero: #c98500;
+  --progress-match: #2563eb;
+  --progress-beat: #008300;
+  --delta-up: #006300;
+
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   color-scheme: light dark;
@@ -43,6 +49,11 @@
     --series-5: #d55181;
     --series-6: #008300;
     --series-other: #9aa0a9;
+
+    --progress-zero: #eda100;
+    --progress-match: #3b82f6;
+    --progress-beat: #0ca30c;
+    --delta-up: #0ca30c;
   }
 }
 
@@ -270,6 +281,18 @@ button.quick {
   align-items: center;
   gap: 0.45rem;
   font-size: 1rem;
+}
+
+.today-delta {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.today-delta.up {
+  color: var(--delta-up);
+  font-weight: 600;
 }
 
 .chart-wrap {

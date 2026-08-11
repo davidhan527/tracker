@@ -45,19 +45,21 @@ export default class HistoryController extends Controller {
 
   private async refresh() {
     if (this.exercises.length === 0) {
-      this.renderToday(new Map())
+      this.renderToday(new Map(), new Map())
       this.renderList([])
       return
     }
 
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const startOfYesterday = new Date(startOfToday)
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1)
 
-    const [today, recent] = await Promise.all([
+    const [twoDays, recent] = await Promise.all([
       supabase
         .from('entries')
-        .select('reps, exercise_id')
-        .gte('created_at', startOfDay.toISOString()),
+        .select('reps, exercise_id, created_at')
+        .gte('created_at', startOfYesterday.toISOString()),
       supabase
         .from('entries')
         .select('id, exercise_id, reps, created_at')
@@ -65,36 +67,35 @@ export default class HistoryController extends Controller {
         .limit(RECENT_LIMIT),
     ])
 
-    const byExercise = new Map<string, number>()
-    for (const row of (today.data ?? []) as Pick<Entry, 'reps' | 'exercise_id'>[]) {
-      byExercise.set(row.exercise_id, (byExercise.get(row.exercise_id) ?? 0) + row.reps)
+    const byToday = new Map<string, number>()
+    const byYesterday = new Map<string, number>()
+    for (const row of (twoDays.data ?? []) as Pick<Entry, 'reps' | 'exercise_id' | 'created_at'>[]) {
+      const bucket = new Date(row.created_at) >= startOfToday ? byToday : byYesterday
+      bucket.set(row.exercise_id, (bucket.get(row.exercise_id) ?? 0) + row.reps)
     }
-    this.renderToday(byExercise)
+    this.renderToday(byToday, byYesterday)
     this.renderList((recent.data ?? []) as Entry[])
   }
 
   // per-exercise totals are the headline; the cross-exercise sum is a small corner note
-  private renderToday(byExercise: Map<string, number>) {
-    const active = this.exercises
-      .map((exercise, i) => ({ exercise, i, total: byExercise.get(exercise.id) ?? 0 }))
-      .filter(({ total }) => total > 0)
-
-    if (active.length === 0) {
-      const none = document.createElement('p')
-      none.className = 'muted'
-      none.textContent = 'No reps yet today.'
-      this.todayTarget.replaceChildren(none)
+  private renderToday(byToday: Map<string, number>, byYesterday: Map<string, number>) {
+    if (this.exercises.length === 0) {
+      this.todayTarget.replaceChildren()
       this.grandTotalTarget.hidden = true
       return
     }
 
     this.todayTarget.replaceChildren(
-      ...active.map(({ exercise, i, total }) => {
+      ...this.exercises.map((exercise, i) => {
+        const today = byToday.get(exercise.id) ?? 0
+        const yesterday = byYesterday.get(exercise.id) ?? 0
+
         const row = document.createElement('div')
         row.className = 'today-row'
         const count = document.createElement('span')
         count.className = 'today-count'
-        count.textContent = String(total)
+        count.textContent = String(today)
+        count.style.color = progressColor(today, yesterday)
         const name = document.createElement('span')
         name.className = 'today-name'
         const swatch = document.createElement('span')
@@ -102,14 +103,15 @@ export default class HistoryController extends Controller {
         const text = document.createElement('span')
         text.textContent = exercise.name // user-named — textContent, never innerHTML
         name.append(swatch, text)
-        row.append(count, name)
+        row.append(count, name, deltaLabel(today, yesterday))
         return row
       }),
     )
 
-    const grand = active.reduce((sum, { total }) => sum + total, 0)
+    const grand = this.exercises.reduce((sum, exercise) => sum + (byToday.get(exercise.id) ?? 0), 0)
+    const active = [...byToday.values()].filter((total) => total > 0).length
     this.grandTotalTarget.textContent = `${grand} total`
-    this.grandTotalTarget.hidden = active.length < 2
+    this.grandTotalTarget.hidden = active < 2
   }
 
   private renderList(entries: Entry[]) {
@@ -140,6 +142,38 @@ export default class HistoryController extends Controller {
     item.append(label, time, remove)
     return item
   }
+}
+
+// yellow at 0 → blue when matching yesterday → green as yesterday is beaten (full at 2×);
+// mixed in OKLab so the ramp stays perceptually even, and resolved from CSS vars so
+// both themes get their own contrast-checked endpoints
+function progressColor(today: number, yesterday: number): string {
+  if (today === 0) return 'var(--progress-zero)'
+  if (yesterday === 0) return 'var(--progress-beat)'
+  const ratio = today / yesterday
+  if (ratio < 1) {
+    return `color-mix(in oklab, var(--progress-match) ${Math.round(ratio * 100)}%, var(--progress-zero))`
+  }
+  const excess = Math.min(ratio - 1, 1)
+  return `color-mix(in oklab, var(--progress-beat) ${Math.round(excess * 100)}%, var(--progress-match))`
+}
+
+// goal-framed: behind reads as a target to chase, never a deficit
+function deltaLabel(today: number, yesterday: number): HTMLElement {
+  const delta = document.createElement('span')
+  delta.className = 'today-delta'
+  const diff = today - yesterday
+  if (today === 0 && yesterday === 0) {
+    delta.textContent = ''
+  } else if (diff > 0) {
+    delta.classList.add('up')
+    delta.textContent = `+${diff} vs yesterday`
+  } else if (diff < 0) {
+    delta.textContent = `${-diff} to match yesterday`
+  } else {
+    delta.textContent = 'matched yesterday'
+  }
+  return delta
 }
 
 function timeAgo(iso: string): string {
