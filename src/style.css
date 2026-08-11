@@ -9,6 +9,15 @@
   --accent-text: #ffffff;
   --danger: #dc2626;
 
+  /* categorical chart series — fixed order, CVD-validated (dataviz palette) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-other: #6b7280;
+
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   color-scheme: light dark;
@@ -25,6 +34,15 @@
     --accent-soft: #3b82f62b;
     --accent-text: #ffffff;
     --danger: #f87171;
+
+    /* same hues re-stepped for the dark surface, validated as a set */
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-other: #9aa0a9;
   }
 }
 
@@ -231,12 +249,43 @@ button.quick {
   height: auto;
 }
 
+.chart-s1 { --series-color: var(--series-1); }
+.chart-s2 { --series-color: var(--series-2); }
+.chart-s3 { --series-color: var(--series-3); }
+.chart-s4 { --series-color: var(--series-4); }
+.chart-s5 { --series-color: var(--series-5); }
+.chart-s6 { --series-color: var(--series-6); }
+.chart-s-other { --series-color: var(--series-other); }
+
 .chart-bar {
-  fill: var(--accent);
+  fill: var(--series-color);
 }
 
 .chart-bar.is-hover {
   opacity: 0.75;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--series-color);
+  flex-shrink: 0;
 }
 
 .chart-grid {
@@ -266,11 +315,38 @@ button.quick {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.25rem 0.55rem;
+  padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
   white-space: nowrap;
   pointer-events: none;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  min-width: 7.5rem;
+}
+
+.tt-date {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.tt-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tt-name {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.tt-val {
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-total {
+  border-top: 1px solid var(--border);
+  margin-top: 0.2rem;
+  padding-top: 0.2rem;
 }
 
 .entries {

@@ -79,18 +79,20 @@
       </section>
 
       <section class="card" data-controller="chart">
-        <h2>Last 30 days · <span data-chart-target="label"></span></h2>
+        <h2>Last 30 days</h2>
         <div class="chart-wrap">
           <div data-chart-target="container"></div>
           <div class="chart-tooltip" data-chart-target="tooltip" hidden></div>
         </div>
+        <div class="chart-legend" data-chart-target="legend" hidden></div>
       </section>
 
       <section class="card" data-controller="history">
         <div class="today">
           <span class="today-count" data-history-target="todayTotal">0</span>
-          <span class="muted">reps today · <span data-history-target="todayLabel"></span></span>
+          <span class="muted">reps today</span>
         </div>
+        <p class="muted small" data-history-target="breakdown"></p>
         <h2>Recent</h2>
         <ul class="entries" data-history-target="list"></ul>
         <p class="muted" data-history-target="empty">Nothing logged yet.</p>

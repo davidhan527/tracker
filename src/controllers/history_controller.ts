@@ -5,15 +5,15 @@ import type { Entry, Exercise } from '../types'
 const RECENT_LIMIT = 20
 
 export default class HistoryController extends Controller {
-  static targets = ['todayTotal', 'todayLabel', 'list', 'empty']
+  static targets = ['todayTotal', 'breakdown', 'list', 'empty']
 
   declare readonly todayTotalTarget: HTMLElement
-  declare readonly todayLabelTarget: HTMLElement
+  declare readonly breakdownTarget: HTMLElement
   declare readonly listTarget: HTMLUListElement
   declare readonly emptyTarget: HTMLElement
 
+  private exercises: Exercise[] = []
   private names = new Map<string, string>()
-  private selectedId: string | null = null
 
   connect() {
     window.addEventListener('exercises:changed', this.onExercises)
@@ -32,9 +32,9 @@ export default class HistoryController extends Controller {
   }
 
   private onExercises = (event: Event) => {
-    const detail = (event as CustomEvent<{ exercises: Exercise[]; selectedId: string | null }>).detail
+    const detail = (event as CustomEvent<{ exercises: Exercise[] }>).detail
+    this.exercises = detail.exercises
     this.names = new Map(detail.exercises.map((exercise) => [exercise.id, exercise.name]))
-    this.selectedId = detail.selectedId
     void this.refresh()
   }
 
@@ -43,9 +43,9 @@ export default class HistoryController extends Controller {
   }
 
   private async refresh() {
-    if (!this.selectedId) {
+    if (this.exercises.length === 0) {
       this.todayTotalTarget.textContent = '0'
-      this.todayLabelTarget.textContent = ''
+      this.breakdownTarget.textContent = ''
       this.renderList([])
       return
     }
@@ -56,8 +56,7 @@ export default class HistoryController extends Controller {
     const [today, recent] = await Promise.all([
       supabase
         .from('entries')
-        .select('reps')
-        .eq('exercise_id', this.selectedId)
+        .select('reps, exercise_id')
         .gte('created_at', startOfDay.toISOString()),
       supabase
         .from('entries')
@@ -66,9 +65,20 @@ export default class HistoryController extends Controller {
         .limit(RECENT_LIMIT),
     ])
 
-    const total = ((today.data ?? []) as Pick<Entry, 'reps'>[]).reduce((sum, row) => sum + row.reps, 0)
+    const todayRows = (today.data ?? []) as Pick<Entry, 'reps' | 'exercise_id'>[]
+    const total = todayRows.reduce((sum, row) => sum + row.reps, 0)
     this.todayTotalTarget.textContent = String(total)
-    this.todayLabelTarget.textContent = this.names.get(this.selectedId) ?? ''
+
+    const byExercise = new Map<string, number>()
+    for (const row of todayRows) {
+      byExercise.set(row.exercise_id, (byExercise.get(row.exercise_id) ?? 0) + row.reps)
+    }
+    // list in exercise order so the breakdown is stable across refreshes
+    this.breakdownTarget.textContent = this.exercises
+      .filter((exercise) => (byExercise.get(exercise.id) ?? 0) > 0)
+      .map((exercise) => `${byExercise.get(exercise.id)} ${exercise.name}`)
+      .join(' · ')
+
     this.renderList((recent.data ?? []) as Entry[])
   }
 
@@ -91,8 +101,8 @@ export default class HistoryController extends Controller {
 
     const remove = document.createElement('button')
     remove.type = 'button'
-    remove.className = 'ghost danger'
-    remove.textContent = '✕'
+    remove.className = 'ghost'
+    remove.textContent = '−'
     remove.setAttribute('aria-label', 'Delete entry')
     remove.dataset.action = 'history#delete'
     remove.dataset.historyIdParam = entry.id
