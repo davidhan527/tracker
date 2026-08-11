@@ -78,6 +78,14 @@
         <p class="status" role="status" data-logger-target="status"></p>
       </section>
 
+      <section class="card" data-controller="chart">
+        <h2>Last 30 days · <span data-chart-target="label"></span></h2>
+        <div class="chart-wrap">
+          <div data-chart-target="container"></div>
+          <div class="chart-tooltip" data-chart-target="tooltip" hidden></div>
+        </div>
+      </section>
+
       <section class="card" data-controller="history">
         <div class="today">
           <span class="today-count" data-history-target="todayTotal">0</span>

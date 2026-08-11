@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { localDateString } from '../lib/chart'
 import { supabase } from '../lib/supabase'
 
 export default class LoggerController extends Controller {
@@ -75,10 +76,4 @@ export default class LoggerController extends Controller {
   private setBusy(busy: boolean) {
     for (const button of this.element.querySelectorAll('button')) button.disabled = busy
   }
-}
-
-function localDateString(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
 }

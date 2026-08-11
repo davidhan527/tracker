@@ -220,6 +220,59 @@ button.quick {
   line-height: 1;
 }
 
+.chart-wrap {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.chart-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart-bar {
+  fill: var(--accent);
+}
+
+.chart-bar.is-hover {
+  opacity: 0.75;
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  fill: var(--text-muted);
+  font-size: 9px;
+}
+
+.chart-peak {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.chart-hit {
+  fill: transparent;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
 .entries {
   list-style: none;
   margin: 0;

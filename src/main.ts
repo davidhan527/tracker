@@ -3,6 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
 import AuthController from './controllers/auth_controller'
+import ChartController from './controllers/chart_controller'
 import ExercisesController from './controllers/exercises_controller'
 import LoggerController from './controllers/logger_controller'
 import HistoryController from './controllers/history_controller'
@@ -12,6 +13,7 @@ registerSW({ immediate: true })
 
 const application = Application.start()
 application.register('auth', AuthController)
+application.register('chart', ChartController)
 application.register('exercises', ExercisesController)
 application.register('logger', LoggerController)
 application.register('history', HistoryController)
