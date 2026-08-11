@@ -47,6 +47,7 @@
         <div class="quick-row">
           <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="5">+5</button>
           <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="10">+10</button>
+          <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="15">+15</button>
           <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="20">+20</button>
         </div>
 
@@ -63,6 +64,17 @@
           />
           <button type="submit" class="primary">Log</button>
         </form>
+
+        <details
+          class="backdate"
+          data-logger-target="details"
+          data-action="toggle->logger#toggleBackdate"
+        >
+          <summary>Log a past day</summary>
+          <label for="log-date">Date</label>
+          <input id="log-date" type="date" data-logger-target="date" />
+          <p class="muted small">While a date is set, every log above is saved to that day.</p>
+        </details>
         <p class="status" role="status" data-logger-target="status"></p>
       </section>
 

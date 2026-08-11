@@ -146,7 +146,7 @@ button.danger {
 
 .quick-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.6rem;
   margin-bottom: 0.75rem;
 }
@@ -175,6 +175,29 @@ button.quick {
   margin: 0.6rem 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+.small {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.backdate {
+  margin-top: 0.9rem;
+}
+
+.backdate summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.backdate label {
+  margin-top: 0.75rem;
+}
+
+.backdate input {
+  margin-bottom: 0.4rem;
 }
 
 .auth-card .status {

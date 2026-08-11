@@ -2,15 +2,18 @@ import { Controller } from '@hotwired/stimulus'
 import { supabase } from '../lib/supabase'
 
 export default class LoggerController extends Controller {
-  static targets = ['picker', 'input', 'status']
+  static targets = ['picker', 'input', 'status', 'details', 'date']
 
   declare readonly inputTarget: HTMLInputElement
   declare readonly statusTarget: HTMLElement
+  declare readonly detailsTarget: HTMLDetailsElement
+  declare readonly dateTarget: HTMLInputElement
 
   private exerciseId: string | null = null
 
   connect() {
     window.addEventListener('exercises:changed', this.onExercises)
+    this.dateTarget.max = localDateString(new Date())
   }
 
   disconnect() {
@@ -29,6 +32,11 @@ export default class LoggerController extends Controller {
     if (await this.log(reps)) this.inputTarget.value = ''
   }
 
+  toggleBackdate() {
+    // closing the disclosure clears the date so quick-logs can't silently stay backdated
+    if (!this.detailsTarget.open) this.dateTarget.value = ''
+  }
+
   private onExercises = (event: Event) => {
     this.exerciseId = (event as CustomEvent<{ selectedId: string | null }>).detail.selectedId
   }
@@ -39,15 +47,27 @@ export default class LoggerController extends Controller {
       return false
     }
 
+    const row: { exercise_id: string; reps: number; created_at?: string } = {
+      exercise_id: this.exerciseId,
+      reps,
+    }
+    const pastDay = this.dateTarget.value
+    if (pastDay) {
+      const [year, month, day] = pastDay.split('-').map(Number)
+      // noon local keeps the entry on the picked calendar day in nearby timezones
+      row.created_at = new Date(year, month - 1, day, 12).toISOString()
+    }
+
     this.setBusy(true)
-    const { error } = await supabase.from('entries').insert({ exercise_id: this.exerciseId, reps })
+    const { error } = await supabase.from('entries').insert(row)
     this.setBusy(false)
 
     if (error) {
       this.statusTarget.textContent = `Could not log: ${error.message}`
       return false
     }
-    this.statusTarget.textContent = ''
+    // backdated entries may not show in the recent list, so confirm explicitly
+    this.statusTarget.textContent = pastDay ? `Logged ${reps} reps for ${pastDay}.` : ''
     window.dispatchEvent(new CustomEvent('entries:changed'))
     return true
   }
@@ -55,4 +75,10 @@ export default class LoggerController extends Controller {
   private setBusy(busy: boolean) {
     for (const button of this.element.querySelectorAll('button')) button.disabled = busy
   }
+}
+
+function localDateString(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
