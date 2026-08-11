@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#111318" />
+    <title>Rep Tracker</title>
+  </head>
+  <body>
+    <section id="auth" data-controller="auth" hidden>
+      <div class="card auth-card">
+        <h1>Rep Tracker</h1>
+        <p class="muted">Log your pushups, pullups, and more. Sign in with a magic link — no password needed.</p>
+        <form data-action="submit->auth#send">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="you@example.com"
+            data-auth-target="email"
+          />
+          <button type="submit" class="primary" data-auth-target="submit">Send magic link</button>
+        </form>
+        <p class="status" role="status" data-auth-target="status"></p>
+      </div>
+    </section>
+
+    <main id="app" data-controller="exercises" hidden>
+      <header class="app-header">
+        <h1>Rep Tracker</h1>
+        <button type="button" id="signout" class="ghost">Sign out</button>
+      </header>
+
+      <section class="card" data-controller="logger">
+        <label for="exercise-picker">Exercise</label>
+        <select
+          id="exercise-picker"
+          data-exercises-target="picker"
+          data-logger-target="picker"
+          data-action="change->exercises#select"
+        ></select>
+
+        <div class="quick-row">
+          <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="5">+5</button>
+          <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="10">+10</button>
+          <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="20">+20</button>
+        </div>
+
+        <form class="inline-form" data-action="submit->logger#add">
+          <input
+            type="number"
+            min="1"
+            max="10000"
+            inputmode="numeric"
+            placeholder="Reps"
+            required
+            aria-label="Reps"
+            data-logger-target="input"
+          />
+          <button type="submit" class="primary">Log</button>
+        </form>
+        <p class="status" role="status" data-logger-target="status"></p>
+      </section>
+
+      <section class="card" data-controller="history">
+        <div class="today">
+          <span class="today-count" data-history-target="todayTotal">0</span>
+          <span class="muted">reps today · <span data-history-target="todayLabel"></span></span>
+        </div>
+        <h2>Recent</h2>
+        <ul class="entries" data-history-target="list"></ul>
+        <p class="muted" data-history-target="empty">Nothing logged yet.</p>
+      </section>
+
+      <section class="card">
+        <form data-action="submit->exercises#create">
+          <label for="new-exercise">Add an exercise</label>
+          <div class="inline-form">
+            <input
+              id="new-exercise"
+              type="text"
+              maxlength="60"
+              placeholder="e.g. Pullups"
+              required
+              data-exercises-target="name"
+            />
+            <button type="submit">Add</button>
+          </div>
+          <p class="status" role="status" data-exercises-target="status"></p>
+        </form>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
