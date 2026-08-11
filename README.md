@@ -29,7 +29,7 @@ npm run lint
 3. Authentication → URL Configuration: set Site URL to `https://davidhan527.github.io/tracker/` and add `http://localhost:5173/tracker/` and `http://localhost:4173/tracker/` as additional redirect URLs.
 4. Optional — nicer PWA sign-in: editing email templates requires custom SMTP (free tiers: Resend, Brevo, or Gmail). With SMTP set up, add `{{ .Token }}` to the Magic Link template body so the email carries a 6-digit code the sign-in screen accepts. Without SMTP, the built-in template is link-only; inside the installed PWA (where the link opens the browser instead of the app), long-press the emailed link → Copy Link and paste it into the sign-in screen — the app verifies its `token` hash directly. The pasted link must not have been opened first (single-use).
 
-Each user only sees their own exercises and entries (RLS, `user_id default auth.uid()`). A "Pushups" exercise is seeded on first sign-in; more can be added in the UI.
+Each user only sees their own activities and entries (RLS, `user_id default auth.uid()`). A "Pushups" activity is seeded on first sign-in; more can be added in the UI — each with a unit (reps, pages, minutes, km), so books ("Dune", pages) track alongside exercises. Databases created before the `unit` column need the one-line migration commented in [supabase/schema.sql](supabase/schema.sql).
 
 ## Architecture notes
 

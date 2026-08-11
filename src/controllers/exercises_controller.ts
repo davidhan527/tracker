@@ -4,10 +4,11 @@ import { supabase } from '../lib/supabase'
 import type { Exercise } from '../types'
 
 export default class ExercisesController extends Controller {
-  static targets = ['picker', 'name', 'status']
+  static targets = ['picker', 'name', 'unit', 'status']
 
   declare readonly pickerTarget: HTMLSelectElement
   declare readonly nameTarget: HTMLInputElement
+  declare readonly unitTarget: HTMLSelectElement
   declare readonly statusTarget: HTMLElement
 
   private exercises: Exercise[] = []
@@ -33,15 +34,20 @@ export default class ExercisesController extends Controller {
     if (!name) return
 
     this.statusTarget.textContent = ''
-    const { data, error } = await supabase.from('exercises').insert({ name }).select().single()
+    const unit = this.unitTarget.value || 'reps'
+    const { data, error } = await supabase.from('exercises').insert({ name, unit }).select().single()
     if (error) {
       this.statusTarget.textContent =
-        error.code === '23505' ? 'That exercise already exists.' : `Could not add: ${error.message}`
+        error.code === '23505'
+          ? 'You are already tracking that.'
+          : error.code === 'PGRST204'
+            ? 'Run the unit-column migration from supabase/schema.sql first.'
+            : `Could not add: ${error.message}`
       return
     }
 
     this.nameTarget.value = ''
-    this.exercises = [...this.exercises, data as Exercise]
+    this.exercises = [...this.exercises, normalize(data)]
     this.render((data as Exercise).id)
   }
 
@@ -58,20 +64,18 @@ export default class ExercisesController extends Controller {
   }
 
   private async load() {
-    const { data, error } = await supabase
-      .from('exercises')
-      .select('id, name, created_at')
-      .order('created_at')
+    // select * so the app keeps working on databases that predate the unit column
+    const { data, error } = await supabase.from('exercises').select('*').order('created_at')
     if (error) {
-      this.statusTarget.textContent = `Could not load exercises: ${error.message}`
+      this.statusTarget.textContent = `Could not load activities: ${error.message}`
       return
     }
 
-    let exercises = (data ?? []) as Exercise[]
+    let exercises = (data ?? []).map(normalize)
     if (exercises.length === 0) {
       // first run for this account; unique(user_id, name) makes a duplicate insert harmless
       const seeded = await supabase.from('exercises').insert({ name: 'Pushups' }).select()
-      exercises = (seeded.data ?? []) as Exercise[]
+      exercises = (seeded.data ?? []).map(normalize)
     }
 
     this.exercises = exercises
@@ -104,4 +108,9 @@ export default class ExercisesController extends Controller {
       }),
     )
   }
+}
+
+function normalize(row: unknown): Exercise {
+  const exercise = row as Exercise
+  return { ...exercise, unit: exercise.unit ?? 'reps' }
 }

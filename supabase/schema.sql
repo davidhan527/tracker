@@ -4,9 +4,13 @@ create table public.exercises (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
+  unit text not null default 'reps' check (char_length(unit) between 1 and 20),
   created_at timestamptz not null default now(),
   unique (user_id, name)
 );
+
+-- Migration for databases created before the unit column existed:
+-- alter table public.exercises add column unit text not null default 'reps' check (char_length(unit) between 1 and 20);
 
 create table public.entries (
   id uuid primary key default gen_random_uuid(),

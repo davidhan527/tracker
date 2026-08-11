@@ -22,7 +22,7 @@ export default class ChartController extends Controller {
   declare readonly headingTarget: HTMLElement
 
   private exercises: Exercise[] = []
-  private seriesNames: string[] = []
+  private series: { name: string; unit: string }[] = []
   private days: StackedDay[] = []
 
   connect() {
@@ -66,8 +66,10 @@ export default class ChartController extends Controller {
     // series slot = position in the exercise list (stable), so colors never repaint
     const hasOther = this.exercises.length > MAX_SERIES
     const slotFor = new Map(this.exercises.map((exercise, i) => [exercise.id, Math.min(i, MAX_SERIES)]))
-    this.seriesNames = this.exercises.slice(0, MAX_SERIES).map((exercise) => exercise.name)
-    if (hasOther) this.seriesNames.push('Other')
+    this.series = this.exercises
+      .slice(0, MAX_SERIES)
+      .map((exercise) => ({ name: exercise.name, unit: exercise.unit }))
+    if (hasOther) this.series.push({ name: 'Other', unit: '' }) // mixed units — leave unlabeled
 
     const rows = ((data ?? []) as { reps: number; created_at: string; exercise_id: string }[]).map(
       (row) => ({ reps: row.reps, created_at: row.created_at, series: slotFor.get(row.exercise_id) ?? -1 }),
@@ -76,11 +78,16 @@ export default class ChartController extends Controller {
     // window grows with history (7 → 30 days) so young data isn't lost in empty space
     const days = this.windowFor(rows, today)
     this.headingTarget.textContent = `Last ${days} days`
-    this.days = stackedDailyTotals(rows, this.seriesNames.length, days, today)
+    this.days = stackedDailyTotals(rows, this.series.length, days, today)
 
-    // one panel per exercise with activity, each on its own scale
-    const active = this.seriesNames
-      .map((name, s) => ({ name, s, total: this.days.reduce((sum, day) => sum + day.values[s], 0) }))
+    // one panel per activity with data, each on its own scale
+    const active = this.series
+      .map(({ name, unit }, s) => ({
+        name,
+        unit,
+        s,
+        total: this.days.reduce((sum, day) => sum + day.values[s], 0),
+      }))
       .filter((series) => series.total > 0)
 
     if (active.length === 0) {
@@ -92,7 +99,7 @@ export default class ChartController extends Controller {
     }
 
     this.containerTarget.replaceChildren(
-      ...active.map(({ name, s, total }, i) => {
+      ...active.map(({ name, unit, s, total }, i) => {
         const panel = document.createElement('div')
         panel.className = 'panel'
 
@@ -105,7 +112,7 @@ export default class ChartController extends Controller {
         title.textContent = name // user-named — textContent, never innerHTML
         const sum = document.createElement('span')
         sum.className = 'panel-total muted'
-        sum.textContent = `${total} in ${this.days.length} days`
+        sum.textContent = `${total}${unit ? ` ${unit}` : ''} in ${this.days.length} days`
         head.append(swatch, title, sum)
 
         const chart = document.createElement('div')
@@ -142,7 +149,8 @@ export default class ChartController extends Controller {
     }
 
     const isToday = day.date === localDateString(new Date())
-    this.tooltipTarget.textContent = `${isToday ? 'Today' : formatDay(day.date)} · ${day.values[series]} reps`
+    const unit = this.series[series]?.unit
+    this.tooltipTarget.textContent = `${isToday ? 'Today' : formatDay(day.date)} · ${day.values[series]}${unit ? ` ${unit}` : ''}`
 
     const wrapRect = this.tooltipTarget.parentElement!.getBoundingClientRect()
     const slotRect = hit.getBoundingClientRect()

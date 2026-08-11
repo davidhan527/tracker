@@ -12,7 +12,7 @@
     <section id="auth" data-controller="auth" hidden>
       <div class="card auth-card">
         <h1>Rep Tracker</h1>
-        <p class="muted">Log your pushups, pullups, and more. Sign in with a magic link — no password needed.</p>
+        <p class="muted">Track your pushups, pages read, and more. Sign in with a magic link — no password needed.</p>
         <form data-action="submit->auth#send">
           <label for="email">Email</label>
           <input
@@ -49,7 +49,7 @@
       </header>
 
       <section class="card" data-controller="logger">
-        <label for="exercise-picker">Exercise</label>
+        <label for="exercise-picker">Activity</label>
         <select
           id="exercise-picker"
           data-exercises-target="picker"
@@ -112,16 +112,22 @@
 
       <section class="card">
         <form data-action="submit->exercises#create">
-          <label for="new-exercise">Add an exercise</label>
+          <label for="new-exercise">Add an activity</label>
           <div class="inline-form">
             <input
               id="new-exercise"
               type="text"
               maxlength="60"
-              placeholder="e.g. Pullups"
+              placeholder="e.g. Dune"
               required
               data-exercises-target="name"
             />
+            <select aria-label="Unit" class="unit-select" data-exercises-target="unit">
+              <option value="reps" selected>reps</option>
+              <option value="pages">pages</option>
+              <option value="minutes">minutes</option>
+              <option value="km">km</option>
+            </select>
             <button type="submit">Add</button>
           </div>
           <p class="status" role="status" data-exercises-target="status"></p>

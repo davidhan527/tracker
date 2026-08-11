@@ -1,6 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { localDateString } from '../lib/chart'
 import { supabase } from '../lib/supabase'
+import type { Exercise } from '../types'
 
 export default class LoggerController extends Controller {
   static targets = ['picker', 'input', 'status', 'details', 'date']
@@ -39,7 +40,12 @@ export default class LoggerController extends Controller {
   }
 
   private onExercises = (event: Event) => {
-    this.exerciseId = (event as CustomEvent<{ selectedId: string | null }>).detail.selectedId
+    const detail = (event as CustomEvent<{ exercises: Exercise[]; selectedId: string | null }>).detail
+    this.exerciseId = detail.selectedId
+    const unit = detail.exercises.find((exercise) => exercise.id === this.exerciseId)?.unit ?? 'reps'
+    const label = unit.charAt(0).toUpperCase() + unit.slice(1)
+    this.inputTarget.placeholder = label
+    this.inputTarget.setAttribute('aria-label', label)
   }
 
   private async log(reps: number): Promise<boolean> {

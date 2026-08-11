@@ -201,6 +201,11 @@ button.quick {
   margin-bottom: 0;
 }
 
+.inline-form .unit-select {
+  width: auto;
+  margin-bottom: 0;
+}
+
 .status {
   min-height: 1.2rem;
   margin: 0.6rem 0 0;

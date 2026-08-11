@@ -1,6 +1,7 @@
 export interface Exercise {
   id: string
   name: string
+  unit: string // 'reps', 'pages', 'minutes', …
   created_at: string
 }
 

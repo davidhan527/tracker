@@ -14,7 +14,7 @@ export default class HistoryController extends Controller {
   declare readonly emptyTarget: HTMLElement
 
   private exercises: Exercise[] = []
-  private names = new Map<string, string>()
+  private byId = new Map<string, Exercise>()
 
   connect() {
     window.addEventListener('exercises:changed', this.onExercises)
@@ -35,7 +35,7 @@ export default class HistoryController extends Controller {
   private onExercises = (event: Event) => {
     const detail = (event as CustomEvent<{ exercises: Exercise[] }>).detail
     this.exercises = detail.exercises
-    this.names = new Map(detail.exercises.map((exercise) => [exercise.id, exercise.name]))
+    this.byId = new Map(detail.exercises.map((exercise) => [exercise.id, exercise]))
     void this.refresh()
   }
 
@@ -103,14 +103,29 @@ export default class HistoryController extends Controller {
         const text = document.createElement('span')
         text.textContent = exercise.name // user-named — textContent, never innerHTML
         name.append(swatch, text)
+        if (exercise.unit !== 'reps') {
+          const unit = document.createElement('span')
+          unit.className = 'muted small'
+          unit.textContent = exercise.unit
+          name.append(unit)
+        }
         row.append(count, name, deltaLabel(today, yesterday))
         return row
       }),
     )
 
-    const grand = this.exercises.reduce((sum, exercise) => sum + (byToday.get(exercise.id) ?? 0), 0)
-    const active = [...byToday.values()].filter((total) => total > 0).length
-    this.grandTotalTarget.textContent = `${grand} total`
+    // summing across units is meaningless, so the corner total groups by unit
+    const byUnit = new Map<string, number>()
+    let active = 0
+    for (const exercise of this.exercises) {
+      const total = byToday.get(exercise.id) ?? 0
+      if (total === 0) continue
+      active++
+      byUnit.set(exercise.unit, (byUnit.get(exercise.unit) ?? 0) + total)
+    }
+    this.grandTotalTarget.textContent = [...byUnit.entries()]
+      .map(([unit, total]) => `${total} ${unit}`)
+      .join(' · ')
     this.grandTotalTarget.hidden = active < 2
   }
 
@@ -124,7 +139,11 @@ export default class HistoryController extends Controller {
 
     const label = document.createElement('span')
     label.className = 'entry-label'
-    label.textContent = `${entry.reps} × ${this.names.get(entry.exercise_id) ?? '?'}`
+    const exercise = this.byId.get(entry.exercise_id)
+    label.textContent =
+      exercise && exercise.unit !== 'reps'
+        ? `${entry.reps} ${exercise.unit} · ${exercise.name}`
+        : `${entry.reps} × ${exercise?.name ?? '?'}`
 
     const time = document.createElement('time')
     time.className = 'muted'
