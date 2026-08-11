@@ -11,7 +11,7 @@ export default class AuthController extends Controller {
   connect() {
     if (!supabaseConfigured) {
       this.statusTarget.textContent =
-        'Supabase is not configured yet: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env, then rebuild.'
+        'Supabase is not configured yet: set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env, then rebuild.'
     }
   }
 

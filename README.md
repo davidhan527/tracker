@@ -24,7 +24,7 @@ npm run lint
 
 ## Supabase setup
 
-1. Create a free project at [supabase.com](https://supabase.com/) and put its URL and anon key in [.env](.env). The anon key is public by design; row-level security enforces data access.
+1. Create a free project at [supabase.com](https://supabase.com/) and put its URL and publishable key in [.env](.env). The publishable key is public by design; row-level security enforces data access.
 2. Run [`supabase/schema.sql`](supabase/schema.sql) in the project's SQL editor.
 3. Authentication → URL Configuration: set Site URL to `https://davidhan527.github.io/tracker/` and add `http://localhost:5173/tracker/` and `http://localhost:4173/tracker/` as additional redirect URLs.
 
