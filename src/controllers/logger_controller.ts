@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { localDateString } from '../lib/chart'
 import { supabase } from '../lib/supabase'
-import type { Exercise } from '../types'
+import type { Activity } from '../types'
 
 export default class LoggerController extends Controller {
   static targets = ['picker', 'input', 'status', 'details', 'date']
@@ -11,15 +11,15 @@ export default class LoggerController extends Controller {
   declare readonly detailsTarget: HTMLDetailsElement
   declare readonly dateTarget: HTMLInputElement
 
-  private exerciseId: string | null = null
+  private activityId: string | null = null
 
   connect() {
-    window.addEventListener('exercises:changed', this.onExercises)
+    window.addEventListener('activities:changed', this.onActivities)
     this.dateTarget.max = localDateString(new Date())
   }
 
   disconnect() {
-    window.removeEventListener('exercises:changed', this.onExercises)
+    window.removeEventListener('activities:changed', this.onActivities)
   }
 
   quick(event: Event) {
@@ -29,9 +29,9 @@ export default class LoggerController extends Controller {
 
   async add(event: SubmitEvent) {
     event.preventDefault()
-    const reps = Number.parseInt(this.inputTarget.value, 10)
-    if (!Number.isFinite(reps) || reps < 1) return
-    if (await this.log(reps)) this.inputTarget.value = ''
+    const amount = Number.parseInt(this.inputTarget.value, 10)
+    if (!Number.isFinite(amount) || amount < 1) return
+    if (await this.log(amount)) this.inputTarget.value = ''
   }
 
   toggleBackdate() {
@@ -39,24 +39,24 @@ export default class LoggerController extends Controller {
     if (!this.detailsTarget.open) this.dateTarget.value = ''
   }
 
-  private onExercises = (event: Event) => {
-    const detail = (event as CustomEvent<{ exercises: Exercise[]; selectedId: string | null }>).detail
-    this.exerciseId = detail.selectedId
-    const unit = detail.exercises.find((exercise) => exercise.id === this.exerciseId)?.unit ?? 'reps'
+  private onActivities = (event: Event) => {
+    const detail = (event as CustomEvent<{ activities: Activity[]; selectedId: string | null }>).detail
+    this.activityId = detail.selectedId
+    const unit = detail.activities.find((activity) => activity.id === this.activityId)?.unit ?? 'reps'
     const label = unit.charAt(0).toUpperCase() + unit.slice(1)
     this.inputTarget.placeholder = label
     this.inputTarget.setAttribute('aria-label', label)
   }
 
-  private async log(reps: number): Promise<boolean> {
-    if (!this.exerciseId) {
-      this.statusTarget.textContent = 'Pick an exercise first.'
+  private async log(amount: number): Promise<boolean> {
+    if (!this.activityId) {
+      this.statusTarget.textContent = 'Pick an activity first.'
       return false
     }
 
-    const row: { exercise_id: string; reps: number; created_at?: string } = {
-      exercise_id: this.exerciseId,
-      reps,
+    const row: { activity_id: string; amount: number; created_at?: string } = {
+      activity_id: this.activityId,
+      amount,
     }
     const pastDay = this.dateTarget.value
     if (pastDay) {
@@ -74,7 +74,7 @@ export default class LoggerController extends Controller {
       return false
     }
     // backdated entries may not show in the recent list, so confirm explicitly
-    this.statusTarget.textContent = pastDay ? `Logged ${reps} reps for ${pastDay}.` : ''
+    this.statusTarget.textContent = pastDay ? `Logged ${amount} for ${pastDay}.` : ''
     window.dispatchEvent(new CustomEvent('entries:changed'))
     return true
   }

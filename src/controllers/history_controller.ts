@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { seriesClass } from '../lib/chart'
 import { supabase } from '../lib/supabase'
-import type { Entry, Exercise } from '../types'
+import type { Activity, Entry } from '../types'
 
 const RECENT_LIMIT = 20
 
@@ -13,16 +13,16 @@ export default class HistoryController extends Controller {
   declare readonly listTarget: HTMLUListElement
   declare readonly emptyTarget: HTMLElement
 
-  private exercises: Exercise[] = []
-  private byId = new Map<string, Exercise>()
+  private activities: Activity[] = []
+  private byId = new Map<string, Activity>()
 
   connect() {
-    window.addEventListener('exercises:changed', this.onExercises)
+    window.addEventListener('activities:changed', this.onActivities)
     window.addEventListener('entries:changed', this.onEntries)
   }
 
   disconnect() {
-    window.removeEventListener('exercises:changed', this.onExercises)
+    window.removeEventListener('activities:changed', this.onActivities)
     window.removeEventListener('entries:changed', this.onEntries)
   }
 
@@ -32,10 +32,10 @@ export default class HistoryController extends Controller {
     if (!error) window.dispatchEvent(new CustomEvent('entries:changed'))
   }
 
-  private onExercises = (event: Event) => {
-    const detail = (event as CustomEvent<{ exercises: Exercise[] }>).detail
-    this.exercises = detail.exercises
-    this.byId = new Map(detail.exercises.map((exercise) => [exercise.id, exercise]))
+  private onActivities = (event: Event) => {
+    const detail = (event as CustomEvent<{ activities: Activity[] }>).detail
+    this.activities = detail.activities
+    this.byId = new Map(detail.activities.map((activity) => [activity.id, activity]))
     void this.refresh()
   }
 
@@ -44,7 +44,7 @@ export default class HistoryController extends Controller {
   }
 
   private async refresh() {
-    if (this.exercises.length === 0) {
+    if (this.activities.length === 0) {
       this.renderToday(new Map(), new Map())
       this.renderList([])
       return
@@ -58,37 +58,37 @@ export default class HistoryController extends Controller {
     const [twoDays, recent] = await Promise.all([
       supabase
         .from('entries')
-        .select('reps, exercise_id, created_at')
+        .select('amount, activity_id, created_at')
         .gte('created_at', startOfYesterday.toISOString()),
       supabase
         .from('entries')
-        .select('id, exercise_id, reps, created_at')
+        .select('id, activity_id, amount, created_at')
         .order('created_at', { ascending: false })
         .limit(RECENT_LIMIT),
     ])
 
     const byToday = new Map<string, number>()
     const byYesterday = new Map<string, number>()
-    for (const row of (twoDays.data ?? []) as Pick<Entry, 'reps' | 'exercise_id' | 'created_at'>[]) {
+    for (const row of (twoDays.data ?? []) as Pick<Entry, 'amount' | 'activity_id' | 'created_at'>[]) {
       const bucket = new Date(row.created_at) >= startOfToday ? byToday : byYesterday
-      bucket.set(row.exercise_id, (bucket.get(row.exercise_id) ?? 0) + row.reps)
+      bucket.set(row.activity_id, (bucket.get(row.activity_id) ?? 0) + row.amount)
     }
     this.renderToday(byToday, byYesterday)
     this.renderList((recent.data ?? []) as Entry[])
   }
 
-  // per-exercise totals are the headline; the cross-exercise sum is a small corner note
+  // per-activity totals are the headline; the cross-activity sum is a small corner note
   private renderToday(byToday: Map<string, number>, byYesterday: Map<string, number>) {
-    if (this.exercises.length === 0) {
+    if (this.activities.length === 0) {
       this.todayTarget.replaceChildren()
       this.grandTotalTarget.hidden = true
       return
     }
 
     this.todayTarget.replaceChildren(
-      ...this.exercises.map((exercise, i) => {
-        const today = byToday.get(exercise.id) ?? 0
-        const yesterday = byYesterday.get(exercise.id) ?? 0
+      ...this.activities.map((activity, i) => {
+        const today = byToday.get(activity.id) ?? 0
+        const yesterday = byYesterday.get(activity.id) ?? 0
 
         const row = document.createElement('div')
         row.className = 'today-row'
@@ -101,12 +101,12 @@ export default class HistoryController extends Controller {
         const swatch = document.createElement('span')
         swatch.className = `legend-swatch ${seriesClass(i)}`
         const text = document.createElement('span')
-        text.textContent = exercise.name // user-named — textContent, never innerHTML
+        text.textContent = activity.name // user-named — textContent, never innerHTML
         name.append(swatch, text)
-        if (exercise.unit !== 'reps') {
+        if (activity.unit !== 'reps') {
           const unit = document.createElement('span')
           unit.className = 'muted small'
-          unit.textContent = exercise.unit
+          unit.textContent = activity.unit
           name.append(unit)
         }
         row.append(count, name, deltaLabel(today, yesterday))
@@ -117,11 +117,11 @@ export default class HistoryController extends Controller {
     // summing across units is meaningless, so the corner total groups by unit
     const byUnit = new Map<string, number>()
     let active = 0
-    for (const exercise of this.exercises) {
-      const total = byToday.get(exercise.id) ?? 0
+    for (const activity of this.activities) {
+      const total = byToday.get(activity.id) ?? 0
       if (total === 0) continue
       active++
-      byUnit.set(exercise.unit, (byUnit.get(exercise.unit) ?? 0) + total)
+      byUnit.set(activity.unit, (byUnit.get(activity.unit) ?? 0) + total)
     }
     this.grandTotalTarget.textContent = [...byUnit.entries()]
       .map(([unit, total]) => `${total} ${unit}`)
@@ -139,11 +139,11 @@ export default class HistoryController extends Controller {
 
     const label = document.createElement('span')
     label.className = 'entry-label'
-    const exercise = this.byId.get(entry.exercise_id)
+    const activity = this.byId.get(entry.activity_id)
     label.textContent =
-      exercise && exercise.unit !== 'reps'
-        ? `${entry.reps} ${exercise.unit} · ${exercise.name}`
-        : `${entry.reps} × ${exercise?.name ?? '?'}`
+      activity && activity.unit !== 'reps'
+        ? `${entry.amount} ${activity.unit} · ${activity.name}`
+        : `${entry.amount} × ${activity?.name ?? '?'}`
 
     const time = document.createElement('time')
     time.className = 'muted'

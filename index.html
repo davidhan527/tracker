@@ -42,19 +42,19 @@
       </div>
     </section>
 
-    <main id="app" data-controller="exercises" hidden>
+    <main id="app" data-controller="activities" hidden>
       <header class="app-header">
         <h1>Rep Tracker</h1>
         <button type="button" id="signout" class="ghost">Sign out</button>
       </header>
 
       <section class="card" data-controller="logger">
-        <label for="exercise-picker">Activity</label>
+        <label for="activity-picker">Activity</label>
         <select
-          id="exercise-picker"
-          data-exercises-target="picker"
+          id="activity-picker"
+          data-activities-target="picker"
           data-logger-target="picker"
-          data-action="change->exercises#select"
+          data-action="change->activities#select"
         ></select>
 
         <div class="quick-row">
@@ -111,18 +111,18 @@
       </section>
 
       <section class="card">
-        <form data-action="submit->exercises#create">
-          <label for="new-exercise">Add an activity</label>
+        <form data-action="submit->activities#create">
+          <label for="new-activity">Add an activity</label>
           <div class="inline-form">
             <input
-              id="new-exercise"
+              id="new-activity"
               type="text"
               maxlength="60"
               placeholder="e.g. Dune"
               required
-              data-exercises-target="name"
+              data-activities-target="name"
             />
-            <select aria-label="Unit" class="unit-select" data-exercises-target="unit">
+            <select aria-label="Unit" class="unit-select" data-activities-target="unit">
               <option value="reps" selected>reps</option>
               <option value="pages">pages</option>
               <option value="minutes">minutes</option>
@@ -130,7 +130,7 @@
             </select>
             <button type="submit">Add</button>
           </div>
-          <p class="status" role="status" data-exercises-target="status"></p>
+          <p class="status" role="status" data-activities-target="status"></p>
         </form>
       </section>
     </main>

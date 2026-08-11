@@ -1,4 +1,4 @@
-export interface Exercise {
+export interface Activity {
   id: string
   name: string
   unit: string // 'reps', 'pages', 'minutes', …
@@ -7,7 +7,7 @@ export interface Exercise {
 
 export interface Entry {
   id: string
-  exercise_id: string
-  reps: number
+  activity_id: string
+  amount: number
   created_at: string
 }

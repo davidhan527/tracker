@@ -9,7 +9,7 @@ import {
   stackedDailyTotals,
   type StackedDay,
 } from '../lib/chart'
-import type { Exercise } from '../types'
+import type { Activity } from '../types'
 
 const MAX_DAYS = 30
 const MIN_DAYS = 7
@@ -21,12 +21,12 @@ export default class ChartController extends Controller {
   declare readonly tooltipTarget: HTMLElement
   declare readonly headingTarget: HTMLElement
 
-  private exercises: Exercise[] = []
+  private activities: Activity[] = []
   private series: { name: string; unit: string }[] = []
   private days: StackedDay[] = []
 
   connect() {
-    window.addEventListener('exercises:changed', this.onExercises)
+    window.addEventListener('activities:changed', this.onActivities)
     window.addEventListener('entries:changed', this.onEntries)
     this.containerTarget.addEventListener('pointerover', this.onPointer)
     this.containerTarget.addEventListener('pointermove', this.onPointer)
@@ -34,12 +34,12 @@ export default class ChartController extends Controller {
   }
 
   disconnect() {
-    window.removeEventListener('exercises:changed', this.onExercises)
+    window.removeEventListener('activities:changed', this.onActivities)
     window.removeEventListener('entries:changed', this.onEntries)
   }
 
-  private onExercises = (event: Event) => {
-    this.exercises = (event as CustomEvent<{ exercises: Exercise[] }>).detail.exercises
+  private onActivities = (event: Event) => {
+    this.activities = (event as CustomEvent<{ activities: Activity[] }>).detail.activities
     void this.refresh()
   }
 
@@ -49,7 +49,7 @@ export default class ChartController extends Controller {
 
   private async refresh() {
     this.hideTooltip()
-    if (this.exercises.length === 0) {
+    if (this.activities.length === 0) {
       this.days = []
       this.containerTarget.replaceChildren()
       return
@@ -59,20 +59,20 @@ export default class ChartController extends Controller {
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (MAX_DAYS - 1))
     const { data, error } = await supabase
       .from('entries')
-      .select('reps, created_at, exercise_id')
+      .select('amount, created_at, activity_id')
       .gte('created_at', start.toISOString())
     if (error) return
 
-    // series slot = position in the exercise list (stable), so colors never repaint
-    const hasOther = this.exercises.length > MAX_SERIES
-    const slotFor = new Map(this.exercises.map((exercise, i) => [exercise.id, Math.min(i, MAX_SERIES)]))
-    this.series = this.exercises
+    // series slot = position in the activity list (stable), so colors never repaint
+    const hasOther = this.activities.length > MAX_SERIES
+    const slotFor = new Map(this.activities.map((activity, i) => [activity.id, Math.min(i, MAX_SERIES)]))
+    this.series = this.activities
       .slice(0, MAX_SERIES)
-      .map((exercise) => ({ name: exercise.name, unit: exercise.unit }))
+      .map((activity) => ({ name: activity.name, unit: activity.unit }))
     if (hasOther) this.series.push({ name: 'Other', unit: '' }) // mixed units — leave unlabeled
 
-    const rows = ((data ?? []) as { reps: number; created_at: string; exercise_id: string }[]).map(
-      (row) => ({ reps: row.reps, created_at: row.created_at, series: slotFor.get(row.exercise_id) ?? -1 }),
+    const rows = ((data ?? []) as { amount: number; created_at: string; activity_id: string }[]).map(
+      (row) => ({ amount: row.amount, created_at: row.created_at, series: slotFor.get(row.activity_id) ?? -1 }),
     )
 
     // window grows with history (7 → 30 days) so young data isn't lost in empty space
@@ -93,7 +93,7 @@ export default class ChartController extends Controller {
     if (active.length === 0) {
       const empty = document.createElement('p')
       empty.className = 'muted'
-      empty.textContent = `No reps in the last ${MAX_DAYS} days.`
+      empty.textContent = `No activity in the last ${MAX_DAYS} days.`
       this.containerTarget.replaceChildren(empty)
       return
     }
@@ -131,6 +131,17 @@ export default class ChartController extends Controller {
     )
   }
 
+  private windowFor(rows: { created_at: string }[], today: Date): number {
+    if (rows.length === 0) return MAX_DAYS
+    const earliest = rows.reduce(
+      (min, row) => Math.min(min, new Date(row.created_at).getTime()),
+      Infinity,
+    )
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const span = Math.floor((startOfToday.getTime() - earliest) / 86_400_000) + 1
+    return Math.min(Math.max(span, MIN_DAYS), MAX_DAYS)
+  }
+
   private onPointer = (event: PointerEvent) => {
     const hit = (event.target as Element).closest?.('[data-index]')
     const wrapper = hit?.closest('.panel-chart') as HTMLElement | null
@@ -163,17 +174,6 @@ export default class ChartController extends Controller {
     )
     this.tooltipTarget.style.left = `${clamped}px`
     this.tooltipTarget.style.top = `${Math.max(panelRect.top - wrapRect.top - this.tooltipTarget.offsetHeight - 2, 0)}px`
-  }
-
-  private windowFor(rows: { created_at: string }[], today: Date): number {
-    if (rows.length === 0) return MAX_DAYS
-    const earliest = rows.reduce(
-      (min, row) => Math.min(min, new Date(row.created_at).getTime()),
-      Infinity,
-    )
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const span = Math.floor((startOfToday.getTime() - earliest) / 86_400_000) + 1
-    return Math.min(Math.max(span, MIN_DAYS), MAX_DAYS)
   }
 
   private hideTooltip = () => {

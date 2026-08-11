@@ -3,7 +3,7 @@ export interface StackedDay {
   values: number[] // reps per series, aligned to the caller's series order
 }
 
-export const MAX_SERIES = 6 // palette slots; exercises beyond this fold into "Other"
+export const MAX_SERIES = 6 // palette slots; activities beyond this fold into "Other"
 
 export function seriesClass(index: number): string {
   return index < MAX_SERIES ? `chart-s${index + 1}` : 'chart-s-other'
@@ -26,7 +26,7 @@ export function localDateString(date: Date): string {
 }
 
 export function stackedDailyTotals(
-  rows: { reps: number; created_at: string; series: number }[],
+  rows: { amount: number; created_at: string; series: number }[],
   seriesCount: number,
   days: number,
   today: Date = new Date(),
@@ -38,7 +38,7 @@ export function stackedDailyTotals(
   }
   for (const row of rows) {
     const bucket = buckets.get(localDateString(new Date(row.created_at)))
-    if (bucket && row.series >= 0 && row.series < seriesCount) bucket[row.series] += row.reps
+    if (bucket && row.series >= 0 && row.series < seriesCount) bucket[row.series] += row.amount
   }
   return [...buckets.entries()].map(([date, values]) => ({ date, values }))
 }
@@ -80,7 +80,7 @@ export function dayTotal(day: StackedDay): number {
   return day.values.reduce((sum, v) => sum + v, 0)
 }
 
-// one exercise's 30 days on its own y-scale, so its trend reads relative to itself
+// one activity's window on its own y-scale, so its trend reads relative to itself
 export function renderPanelChart(
   days: { date: string; total: number }[],
   seriesCls: string,
