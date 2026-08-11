@@ -25,6 +25,22 @@
           />
           <button type="submit" class="primary" data-auth-target="submit">Send magic link</button>
         </form>
+        <form data-action="submit->auth#verify" data-auth-target="codeForm" hidden>
+          <label for="otp-code">Or enter the 6-digit code from the email</label>
+          <div class="inline-form">
+            <input
+              id="otp-code"
+              class="code-input"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="8"
+              placeholder="123456"
+              required
+              data-auth-target="code"
+            />
+            <button type="submit">Verify</button>
+          </div>
+        </form>
         <p class="status" role="status" data-auth-target="status"></p>
       </div>
     </section>

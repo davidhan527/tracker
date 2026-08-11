@@ -222,6 +222,14 @@ button.quick {
   text-align: center;
 }
 
+.auth-card form + form {
+  margin-top: 0.9rem;
+}
+
+.code-input {
+  letter-spacing: 0.15em;
+}
+
 .auth-card button.primary {
   width: 100%;
 }
