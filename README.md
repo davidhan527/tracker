@@ -27,7 +27,7 @@ npm run lint
 1. Create a free project at [supabase.com](https://supabase.com/) and put its URL and publishable key in [.env](.env). The publishable key is public by design; row-level security enforces data access.
 2. Run [`supabase/schema.sql`](supabase/schema.sql) in the project's SQL editor.
 3. Authentication → URL Configuration: set Site URL to `https://davidhan527.github.io/tracker/` and add `http://localhost:5173/tracker/` and `http://localhost:4173/tracker/` as additional redirect URLs.
-4. Authentication → Email Templates → Magic Link: make sure the body includes `{{ .Token }}` (e.g. `<p>Or enter this code: {{ .Token }}</p>`) alongside the link. The sign-in screen accepts this 6-digit code — the only way to sign in inside the installed PWA, where the emailed link opens the browser instead of the app.
+4. Optional — nicer PWA sign-in: editing email templates requires custom SMTP (free tiers: Resend, Brevo, or Gmail). With SMTP set up, add `{{ .Token }}` to the Magic Link template body so the email carries a 6-digit code the sign-in screen accepts. Without SMTP, the built-in template is link-only; inside the installed PWA (where the link opens the browser instead of the app), long-press the emailed link → Copy Link and paste it into the sign-in screen — the app verifies its `token` hash directly. The pasted link must not have been opened first (single-use).
 
 Each user only sees their own exercises and entries (RLS, `user_id default auth.uid()`). A "Pushups" exercise is seeded on first sign-in; more can be added in the UI.
 
