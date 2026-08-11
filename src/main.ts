@@ -42,5 +42,6 @@ supabase.auth.onAuthStateChange((event, session) => {
 })
 
 document.getElementById('signout')!.addEventListener('click', () => {
-  void supabase.auth.signOut()
+  // local scope: sign out this device only — the default 'global' revokes every device
+  void supabase.auth.signOut({ scope: 'local' })
 })
