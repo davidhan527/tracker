@@ -1,19 +1,13 @@
 import { Controller } from '@hotwired/stimulus'
-import {
-  MAX_SERIES,
-  formatDay,
-  localDateString,
-  renderHabitStrip,
-  renderPanelChart,
-  seriesClass,
-  stackedDailyTotals,
-  type StackedDay,
-} from '../lib/chart'
+import { formatDay, localDateString, seriesClass } from '../lib/chart'
 import { entriesSince } from '../lib/data'
 import type { Activity } from '../types'
 
 const MAX_DAYS = 30
 const MIN_DAYS = 7
+const CELL = 9 // px, matches .mx-cell
+const GAP = 2
+const LABEL = 64
 
 export default class ChartController extends Controller {
   static targets = ['container', 'tooltip', 'heading']
@@ -23,20 +17,21 @@ export default class ChartController extends Controller {
   declare readonly headingTarget: HTMLElement
 
   private activities: Activity[] = []
-  private series: { name: string; unit: string; kind: string }[] = []
-  private days: StackedDay[] = []
+  private perDay = new Map<string, Map<string, number>>()
+  private hasData = false
 
   connect() {
     window.addEventListener('activities:changed', this.onActivities)
     window.addEventListener('entries:changed', this.onEntries)
+    window.addEventListener('resize', this.onResize)
     this.containerTarget.addEventListener('pointerover', this.onPointer)
-    this.containerTarget.addEventListener('pointermove', this.onPointer)
     this.containerTarget.addEventListener('pointerleave', this.hideTooltip)
   }
 
   disconnect() {
     window.removeEventListener('activities:changed', this.onActivities)
     window.removeEventListener('entries:changed', this.onEntries)
+    window.removeEventListener('resize', this.onResize)
   }
 
   private onActivities = (event: Event) => {
@@ -48,10 +43,14 @@ export default class ChartController extends Controller {
     void this.refresh()
   }
 
+  private onResize = () => {
+    if (this.hasData) this.render()
+  }
+
   private async refresh() {
     this.hideTooltip()
     if (this.activities.length === 0) {
-      this.days = []
+      this.hasData = false
       this.containerTarget.replaceChildren()
       return
     }
@@ -60,133 +59,151 @@ export default class ChartController extends Controller {
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (MAX_DAYS - 1))
     const entries = await entriesSince(start)
 
-    // series slot = position in the activity list (stable), so colors never repaint
-    const hasOther = this.activities.length > MAX_SERIES
-    const slotFor = new Map(this.activities.map((activity, i) => [activity.id, Math.min(i, MAX_SERIES)]))
-    this.series = this.activities
-      .slice(0, MAX_SERIES)
-      .map((activity) => ({ name: activity.name, unit: activity.unit, kind: activity.kind }))
-    if (hasOther) this.series.push({ name: 'Other', unit: '', kind: 'exercise' }) // mixed — leave unlabeled
+    this.perDay = new Map()
+    for (const entry of entries) {
+      let days = this.perDay.get(entry.activity_id)
+      if (!days) this.perDay.set(entry.activity_id, (days = new Map()))
+      days.set(entry.day, (days.get(entry.day) ?? 0) + entry.amount)
+    }
+    this.hasData = true
+    this.render()
+  }
 
-    const rows = entries.map((entry) => ({
-      amount: entry.amount,
-      day: entry.day,
-      series: slotFor.get(entry.activity_id) ?? -1,
-    }))
-
-    // window grows with history (7 → 30 days) so young data isn't lost in empty space
-    const days = this.windowFor(rows, today)
+  private render() {
+    // window adapts to both the data span and the width the cells actually have
+    const capacity = Math.floor((this.containerTarget.clientWidth - LABEL - 4) / (CELL + GAP))
+    if (capacity < 1) return
+    const span = this.dataSpan()
+    const days = Math.max(Math.min(span, capacity, MAX_DAYS), Math.min(MIN_DAYS, capacity))
     this.headingTarget.textContent = `Last ${days} days`
-    this.days = stackedDailyTotals(rows, this.series.length, days, today)
 
-    // one panel per activity with data, each on its own scale
-    const active = this.series
-      .map(({ name, unit, kind }, s) => ({
-        name,
-        unit,
-        kind,
-        s,
-        total: this.days.reduce((sum, day) => sum + day.values[s], 0),
-        daysDone: this.days.filter((day) => day.values[s] > 0).length,
-      }))
-      .filter((series) => series.total > 0)
-
-    if (active.length === 0) {
-      const empty = document.createElement('p')
-      empty.className = 'muted'
-      empty.textContent = `No activity in the last ${MAX_DAYS} days.`
-      this.containerTarget.replaceChildren(empty)
-      return
+    const keys: string[] = []
+    for (let offset = days - 1; offset >= 0; offset--) {
+      const d = new Date()
+      d.setDate(d.getDate() - offset)
+      keys.push(localDateString(d))
     }
 
-    this.containerTarget.replaceChildren(
-      ...active.map(({ name, unit, kind, s, total, daysDone }, i) => {
-        const panel = document.createElement('div')
-        panel.className = 'panel'
+    const rows: HTMLElement[] = []
 
-        const head = document.createElement('div')
-        head.className = 'panel-head'
-        const swatch = document.createElement('span')
-        swatch.className = `legend-swatch ${seriesClass(s)}`
-        const title = document.createElement('span')
-        title.className = 'panel-name'
-        title.textContent = name // user-named — textContent, never innerHTML
-        const sum = document.createElement('span')
-        sum.className = 'panel-total muted'
-        sum.textContent =
-          kind === 'habit'
-            ? `${daysDone} of ${this.days.length} days`
-            : `${total}${unit ? ` ${unit}` : ''} in ${this.days.length} days`
-        head.append(swatch, title, sum)
-
-        const chart = document.createElement('div')
-        chart.className = 'panel-chart'
-        chart.dataset.series = String(s)
-        const perDay = this.days.map((day) => ({ date: day.date, total: day.values[s] }))
-        const showDates = i === active.length - 1 // date labels only on the bottom panel; x is shared
-        // svg markup is built from numbers and locale date strings only — no user content
-        chart.innerHTML =
-          kind === 'habit'
-            ? renderHabitStrip(perDay, seriesClass(s), showDates)
-            : renderPanelChart(perDay, seriesClass(s), showDates)
-
-        panel.append(head, chart)
-        return panel
+    // "All" summary row: how many activities were touched each day
+    const counts = keys.map(
+      (key) => this.activities.filter((a) => (this.perDay.get(a.id)?.get(key) ?? 0) > 0).length,
+    )
+    rows.push(
+      this.buildRow('All', 'mx-all', keys, counts, Math.max(...counts, 1), (key, count) => {
+        const label = `${formatDay(key)} · ${count} of ${this.activities.length} active`
+        return { level: count === 0 ? 0 : count === 1 ? 1 : count < this.activities.length ? 2 : 3, tip: label }
       }),
+    )
+
+    for (const [i, activity] of this.activities.entries()) {
+      const amounts = keys.map((key) => this.perDay.get(activity.id)?.get(key) ?? 0)
+      const max = Math.max(...amounts, 1)
+      rows.push(
+        this.buildRow(activity.name, seriesClass(i), keys, amounts, max, (key, amount) => {
+          if (activity.kind === 'habit') {
+            return { level: amount > 0 ? 3 : 0, tip: `${formatDay(key)} · ${amount > 0 ? 'done ✓' : 'not done'} · ${activity.name}` }
+          }
+          const ratio = amount / max
+          return {
+            level: amount === 0 ? 0 : ratio < 0.5 ? 1 : ratio < 0.85 ? 2 : 3,
+            tip: `${formatDay(key)} · ${amount} ${activity.unit} · ${activity.name}`,
+          }
+        }),
+      )
+    }
+
+    rows.push(this.buildTicks(keys))
+    this.containerTarget.replaceChildren(...rows)
+  }
+
+  private buildRow(
+    name: string,
+    colorClass: string,
+    keys: string[],
+    values: number[],
+    _max: number,
+    cellFor: (key: string, value: number) => { level: number; tip: string },
+  ): HTMLElement {
+    const row = document.createElement('div')
+    row.className = 'mx-row'
+    const label = document.createElement('span')
+    label.className = 'mx-label'
+    label.textContent = name // user-named — textContent, never innerHTML
+    row.appendChild(label)
+    keys.forEach((key, i) => {
+      const { level, tip } = cellFor(key, values[i])
+      const cell = document.createElement('span')
+      cell.className = level === 0 ? 'mx-cell off' : `mx-cell ${colorClass}`
+      if (level === 1) cell.style.opacity = '0.4'
+      if (level === 2) cell.style.opacity = '0.7'
+      cell.dataset.tip = tip
+      row.appendChild(cell)
+    })
+    return row
+  }
+
+  private buildTicks(keys: string[]): HTMLElement {
+    const row = document.createElement('div')
+    row.className = 'mx-row mx-ticks'
+    const pad = document.createElement('span')
+    pad.className = 'mx-label'
+    row.appendChild(pad)
+    // weekly, anchored at the newest day: 7 cells ≈ 77px, always clear of collisions
+    const step = 7
+    keys.forEach((key, i) => {
+      const fromEnd = keys.length - 1 - i
+      const tick = document.createElement('span')
+      tick.className = 'mx-tick'
+      tick.style.width = `${CELL + GAP}px`
+      if (fromEnd % step === 0) {
+        const text = document.createElement('span')
+        text.textContent = formatDay(key)
+        text.className = fromEnd === 0 ? 'mx-tick-text end' : 'mx-tick-text'
+        tick.appendChild(text)
+      }
+      row.appendChild(tick)
+    })
+    return row
+  }
+
+  private dataSpan(): number {
+    let earliest: string | null = null
+    for (const days of this.perDay.values()) {
+      for (const day of days.keys()) {
+        if (!earliest || day < earliest) earliest = day
+      }
+    }
+    if (!earliest) return MIN_DAYS
+    const [year, month, day] = earliest.split('-').map(Number)
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    return (
+      Math.floor((startOfToday.getTime() - new Date(year, month - 1, day).getTime()) / 86_400_000) + 1
     )
   }
 
-  private windowFor(rows: { day: string }[], today: Date): number {
-    if (rows.length === 0) return MAX_DAYS
-    const earliest = rows.reduce((min, row) => (row.day < min ? row.day : min), rows[0].day)
-    const [year, month, day] = earliest.split('-').map(Number)
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const span = Math.floor((startOfToday.getTime() - new Date(year, month - 1, day).getTime()) / 86_400_000) + 1
-    return Math.min(Math.max(span, MIN_DAYS), MAX_DAYS)
-  }
-
   private onPointer = (event: PointerEvent) => {
-    const hit = (event.target as Element).closest?.('[data-index]')
-    const wrapper = hit?.closest('.panel-chart') as HTMLElement | null
-    if (!hit || !wrapper) {
+    const cell = (event.target as Element).closest?.('.mx-cell') as HTMLElement | null
+    if (!cell?.dataset.tip) {
       this.hideTooltip()
       return
     }
-    const index = Number(hit.getAttribute('data-index'))
-    const series = Number(wrapper.dataset.series)
-    const day = this.days[index]
-    if (!day) return
-
-    // highlight the hovered day across every panel so the panels stay comparable
-    for (const bar of this.containerTarget.querySelectorAll('.chart-bar')) {
-      bar.classList.toggle('is-hover', bar.getAttribute('data-index') === String(index))
-    }
-
-    const isToday = day.date === localDateString(new Date())
-    const dayLabel = isToday ? 'Today' : formatDay(day.date)
-    const { unit, kind } = this.series[series] ?? { unit: '', kind: 'exercise' }
-    this.tooltipTarget.textContent =
-      kind === 'habit'
-        ? `${dayLabel} · ${day.values[series] > 0 ? 'done ✓' : 'not done'}`
-        : `${dayLabel} · ${day.values[series]}${unit ? ` ${unit}` : ''}`
-
+    this.tooltipTarget.textContent = cell.dataset.tip
     const wrapRect = this.tooltipTarget.parentElement!.getBoundingClientRect()
-    const slotRect = hit.getBoundingClientRect()
-    const panelRect = wrapper.getBoundingClientRect()
+    const cellRect = cell.getBoundingClientRect()
     this.tooltipTarget.hidden = false
-    const x = slotRect.left + slotRect.width / 2 - wrapRect.left
+    const x = cellRect.left + cellRect.width / 2 - wrapRect.left
     const clamped = Math.min(
       Math.max(x, this.tooltipTarget.offsetWidth / 2),
       wrapRect.width - this.tooltipTarget.offsetWidth / 2,
     )
     this.tooltipTarget.style.left = `${clamped}px`
-    this.tooltipTarget.style.top = `${Math.max(panelRect.top - wrapRect.top - this.tooltipTarget.offsetHeight - 2, 0)}px`
+    this.tooltipTarget.style.top = `${Math.max(cellRect.top - wrapRect.top - this.tooltipTarget.offsetHeight - 4, 0)}px`
   }
 
   private hideTooltip = () => {
     this.tooltipTarget.hidden = true
-    for (const bar of this.containerTarget.querySelectorAll('.chart-bar.is-hover')) {
-      bar.classList.remove('is-hover')
-    }
   }
 }

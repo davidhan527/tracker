@@ -442,12 +442,6 @@ button.quick {
   margin-top: 0.5rem;
 }
 
-.chart-wrap svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 .chart-s1 { --series-color: var(--series-1); }
 .chart-s2 { --series-color: var(--series-2); }
 .chart-s3 { --series-color: var(--series-3); }
@@ -456,39 +450,63 @@ button.quick {
 .chart-s6 { --series-color: var(--series-6); }
 .chart-s-other { --series-color: var(--series-other); }
 
-.chart-bar {
-  fill: var(--series-color);
-}
 
-.chart-bar.is-hover {
-  opacity: 0.75;
-}
-
-.panel + .panel {
-  margin-top: 0.75rem;
-}
-
-.panel-head {
+.mx-row {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.85rem;
-  margin-bottom: 0.2rem;
+  gap: 2px;
+  margin-bottom: 5px;
 }
 
-.panel-name {
-  font-weight: 600;
+.mx-label {
+  width: 64px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 4px;
 }
 
-.panel-total {
-  margin-left: auto;
-  font-size: 0.8rem;
+.mx-cell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2.5px;
+  flex-shrink: 0;
+  background: var(--series-color);
 }
 
-.panel-chart svg {
-  display: block;
-  width: 100%;
-  height: auto;
+.mx-cell.off {
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.mx-all {
+  --series-color: var(--series-other);
+}
+
+.mx-ticks {
+  margin-bottom: 0;
+}
+
+.mx-tick {
+  flex-shrink: 0;
+  position: relative;
+  height: 1rem;
+}
+
+.mx-tick-text {
+  position: absolute;
+  left: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.mx-tick-text.end {
+  left: auto;
+  right: 0;
 }
 
 .legend-swatch {
@@ -497,31 +515,6 @@ button.quick {
   border-radius: 3px;
   background: var(--series-color);
   flex-shrink: 0;
-}
-
-.chart-grid {
-  stroke: var(--border);
-  stroke-width: 1;
-}
-
-.chart-tick {
-  fill: var(--text-muted);
-  font-size: 9px;
-}
-
-.chart-peak {
-  fill: var(--text);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.chart-hit {
-  fill: transparent;
-}
-
-.chart-miss {
-  fill: var(--border);
-  opacity: 0.55;
 }
 
 .chart-tooltip {
