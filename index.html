@@ -48,13 +48,17 @@
         <button type="button" id="signout" class="ghost">Sign out</button>
       </header>
 
-      <div data-controller="history">
+      <div data-controller="dashboard">
         <section class="card">
+          <p class="nudge" data-dashboard-target="nudge" hidden></p>
           <div class="card-head">
             <h2>Today</h2>
-            <span class="muted small" data-history-target="grandTotal" hidden></span>
+            <span class="muted small" data-dashboard-target="grandTotal" hidden></span>
           </div>
-          <div class="today-rows" data-history-target="today"></div>
+          <div class="hero">
+            <div class="rings" data-dashboard-target="rings" hidden></div>
+            <div class="today-rows" data-dashboard-target="today"></div>
+          </div>
         </section>
 
         <section class="card" data-controller="chart">
@@ -67,8 +71,8 @@
 
         <section class="card">
           <h2>Recent</h2>
-          <ul class="entries" data-history-target="list"></ul>
-          <p class="muted" data-history-target="empty">Nothing logged yet.</p>
+          <ul class="entries" data-dashboard-target="list"></ul>
+          <p class="muted" data-dashboard-target="empty">Nothing logged yet.</p>
         </section>
       </div>
 
@@ -158,11 +162,7 @@
                 <option value="book">book</option>
                 <option value="habit">habit (yes/no)</option>
               </select>
-              <select aria-label="Unit" class="unit-select" data-activities-target="unit">
-                <option value="reps" selected>reps</option>
-                <option value="minutes">minutes</option>
-                <option value="km">km</option>
-              </select>
+              <select aria-label="Unit" class="unit-select" data-activities-target="unit"></select>
               <button type="submit" class="grow">Add</button>
             </div>
             <p class="status" role="status" data-activities-target="status"></p>

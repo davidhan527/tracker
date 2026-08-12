@@ -308,6 +308,86 @@ button.quick {
   width: 100%;
 }
 
+.nudge {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.rings {
+  width: 150px;
+  flex-shrink: 0;
+  margin: 0 auto;
+}
+
+.rings svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--border);
+}
+
+.ring-arc {
+  fill: none;
+  stroke: var(--series-color);
+  stroke-linecap: round;
+}
+
+.ring-center {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.ring-sub {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.hero .today-rows {
+  flex: 1;
+  min-width: 15rem;
+}
+
+.today-side {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+}
+
+.strip {
+  display: flex;
+  gap: 2px;
+}
+
+.strip-cell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2.5px;
+  background: var(--series-color);
+}
+
+.strip-cell.off {
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
 .card-head {
   display: flex;
   align-items: baseline;
@@ -347,7 +427,6 @@ button.quick {
 }
 
 .today-delta {
-  margin-left: auto;
   font-size: 0.8rem;
   color: var(--text-muted);
   text-align: right;

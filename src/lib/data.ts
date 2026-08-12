@@ -15,21 +15,23 @@ const ACTIVITY_TABLE: Record<Kind, string> = {
 
 const ENTRY: Record<Kind, { table: string; ref: string; amount: string | null }> = {
   exercise: { table: 'exercise_entries', ref: 'exercise_id', amount: 'amount' },
-  book: { table: 'book_entries', ref: 'book_id', amount: 'pages' },
+  book: { table: 'book_entries', ref: 'book_id', amount: 'amount' },
   habit: { table: 'habit_entries', ref: 'habit_id', amount: null },
-}
-
-function defaultUnit(kind: Kind): string {
-  return kind === 'book' ? 'pages' : kind === 'habit' ? 'days' : 'reps'
 }
 
 type Raw = Record<string, unknown>
 
 function toActivity(kind: Kind, row: Raw): Activity {
+  const unit =
+    kind === 'exercise'
+      ? ((row.unit as string) ?? 'reps')
+      : kind === 'book'
+        ? ((row.unit as string) ?? 'pages')
+        : 'days'
   return {
     id: row.id as string,
     name: row.name as string,
-    unit: kind === 'exercise' ? ((row.unit as string) ?? 'reps') : defaultUnit(kind),
+    unit,
     kind,
     created_at: row.created_at as string,
   }
@@ -55,7 +57,7 @@ export async function createActivity(
   name: string,
   unit: string,
 ): Promise<{ activity: Activity | null; error: { code?: string; message: string } | null }> {
-  const row: Raw = kind === 'exercise' ? { name, unit } : { name }
+  const row: Raw = kind === 'habit' ? { name } : { name, unit }
   const { data, error } = await supabase.from(ACTIVITY_TABLE[kind]).insert(row).select().single()
   if (error) return { activity: null, error }
   return { activity: toActivity(kind, data as Raw), error: null }
@@ -89,11 +91,13 @@ export async function logEntry(
 function toEntry(kind: Kind, row: Raw): Entry {
   const spec = ENTRY[kind]
   const created_at = row.created_at as string
+  // ?? row.pages: tolerate book rows from before the pages→amount rename
+  const amount = kind === 'habit' ? 1 : ((row[spec.amount!] ?? row.pages) as number)
   return {
     id: row.id as string,
     kind,
     activity_id: row[spec.ref] as string,
-    amount: kind === 'habit' ? 1 : (row[spec.amount!] as number),
+    amount,
     day: kind === 'habit' ? (row.done_on as string) : localDateString(new Date(created_at)),
     created_at,
   }

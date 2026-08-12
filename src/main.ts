@@ -5,8 +5,8 @@ import { supabase } from './lib/supabase'
 import ActivitiesController from './controllers/activities_controller'
 import AuthController from './controllers/auth_controller'
 import ChartController from './controllers/chart_controller'
+import DashboardController from './controllers/dashboard_controller'
 import LoggerController from './controllers/logger_controller'
-import HistoryController from './controllers/history_controller'
 import './style.css'
 
 registerSW({ immediate: true })
@@ -15,8 +15,8 @@ const application = Application.start()
 application.register('activities', ActivitiesController)
 application.register('auth', AuthController)
 application.register('chart', ChartController)
+application.register('dashboard', DashboardController)
 application.register('logger', LoggerController)
-application.register('history', HistoryController)
 
 const authSection = document.getElementById('auth')!
 const appMain = document.getElementById('app')!

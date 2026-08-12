@@ -4,6 +4,12 @@ import { createActivity, loadActivities } from '../lib/data'
 import { supabase } from '../lib/supabase'
 import type { Activity, Kind } from '../types'
 
+const UNIT_OPTIONS: Record<string, string[]> = {
+  exercise: ['reps', 'minutes', 'km'],
+  book: ['pages', 'chapters'],
+  habit: [],
+}
+
 export default class ActivitiesController extends Controller {
   static targets = ['picker', 'name', 'unit', 'kind', 'status']
 
@@ -18,6 +24,7 @@ export default class ActivitiesController extends Controller {
 
   connect() {
     window.addEventListener('session:changed', this.onSession)
+    this.kindChanged()
     // connect() can run before or after the client emits INITIAL_SESSION, so also pull
     void supabase.auth.getSession().then(({ data }) => this.handleSession(data.session))
   }
@@ -30,10 +37,18 @@ export default class ActivitiesController extends Controller {
     this.broadcast()
   }
 
-  // only exercises choose a unit; books are always pages, habits are yes/no days
+  // each kind offers its own units; habits are yes/no days with no choice
   kindChanged() {
-    this.unitTarget.hidden = this.kindTarget.value !== 'exercise'
-    if (this.kindTarget.value === 'exercise') this.unitTarget.value = 'reps'
+    const units = UNIT_OPTIONS[this.kindTarget.value] ?? []
+    this.unitTarget.hidden = units.length === 0
+    this.unitTarget.replaceChildren(
+      ...units.map((unit) => {
+        const option = document.createElement('option')
+        option.value = unit
+        option.textContent = unit
+        return option
+      }),
+    )
   }
 
   async create(event: SubmitEvent) {
@@ -43,7 +58,8 @@ export default class ActivitiesController extends Controller {
 
     this.statusTarget.textContent = ''
     const kind = (this.kindTarget.value || 'exercise') as Kind
-    const { activity, error } = await createActivity(kind, name, this.unitTarget.value || 'reps')
+    const fallback = UNIT_OPTIONS[kind]?.[0] ?? 'reps'
+    const { activity, error } = await createActivity(kind, name, this.unitTarget.value || fallback)
     if (error || !activity) {
       this.statusTarget.textContent =
         error?.code === '23505'

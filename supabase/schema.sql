@@ -15,6 +15,7 @@ create table public.books (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
+  unit text not null default 'pages' check (unit in ('pages', 'chapters')),
   created_at timestamptz not null default now(),
   unique (user_id, name)
 );
@@ -39,7 +40,7 @@ create table public.book_entries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   book_id uuid not null references public.books (id) on delete cascade,
-  pages integer not null check (pages between 1 and 10000),
+  amount integer not null check (amount between 1 and 10000),
   created_at timestamptz not null default now()
 );
 
@@ -96,3 +97,7 @@ create policy "own rows" on public.habit_entries for all using (auth.uid() = use
 -- After the new app is deployed and verified:
 -- drop table public.entries;
 -- drop table public.activities;
+--
+-- 2026-08: books grew a unit (pages/chapters) and book_entries.pages became amount:
+-- alter table public.books add column unit text not null default 'pages' check (unit in ('pages', 'chapters'));
+-- alter table public.book_entries rename column pages to amount;

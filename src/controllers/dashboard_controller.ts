@@ -1,14 +1,21 @@
 import { Controller } from '@hotwired/stimulus'
-import { formatDay, localDateString, seriesClass } from '../lib/chart'
+import { formatDay, localDateString, renderRings, seriesClass } from '../lib/chart'
 import { deleteEntry, entriesSince, recentEntries } from '../lib/data'
 import type { Activity, Entry, Kind } from '../types'
 
 const RECENT_LIMIT = 20
-const STREAK_WINDOW = 30
+const WINDOW = 30
+const STRIP_DAYS = 7
 
-export default class HistoryController extends Controller {
-  static targets = ['today', 'grandTotal', 'list', 'empty']
+// hardcoded ring lineup, outermost first (matched by exact activity name);
+// activities not yet created simply have no ring until they exist
+const RING_ACTIVITIES = ['Bible', 'Pushups', 'Chin-ups']
 
+export default class DashboardController extends Controller {
+  static targets = ['nudge', 'rings', 'today', 'grandTotal', 'list', 'empty']
+
+  declare readonly nudgeTarget: HTMLElement
+  declare readonly ringsTarget: HTMLElement
   declare readonly todayTarget: HTMLElement
   declare readonly grandTotalTarget: HTMLElement
   declare readonly listTarget: HTMLUListElement
@@ -45,57 +52,133 @@ export default class HistoryController extends Controller {
 
   private async refresh() {
     if (this.activities.length === 0) {
-      this.renderToday(new Map(), new Map(), new Map())
+      this.renderToday(new Map())
       this.renderList([])
+      this.ringsTarget.hidden = true
+      this.nudgeTarget.hidden = true
       return
     }
 
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
-    // wide window so habit streaks can be counted, not just today/yesterday
     const windowStart = new Date(startOfToday)
-    windowStart.setDate(windowStart.getDate() - (STREAK_WINDOW - 1))
+    windowStart.setDate(windowStart.getDate() - (WINDOW - 1))
 
-    const [window, recent] = await Promise.all([entriesSince(windowStart), recentEntries(RECENT_LIMIT)])
+    const [window_, recent] = await Promise.all([entriesSince(windowStart), recentEntries(RECENT_LIMIT)])
 
-    const todayKey = localDateString(startOfToday)
-    const yesterday = new Date(startOfToday)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayKey = localDateString(yesterday)
-
-    const byToday = new Map<string, number>()
-    const byYesterday = new Map<string, number>()
-    const daysDone = new Map<string, Set<string>>()
-    for (const entry of window) {
-      if (entry.day === todayKey) {
-        byToday.set(entry.activity_id, (byToday.get(entry.activity_id) ?? 0) + entry.amount)
-      } else if (entry.day === yesterdayKey) {
-        byYesterday.set(entry.activity_id, (byYesterday.get(entry.activity_id) ?? 0) + entry.amount)
-      }
-      let days = daysDone.get(entry.activity_id)
-      if (!days) daysDone.set(entry.activity_id, (days = new Set()))
-      days.add(entry.day)
+    // per-activity, per-day totals: one aggregation feeds rings, rows, strips, streaks
+    const perDay = new Map<string, Map<string, number>>()
+    for (const entry of window_) {
+      let days = perDay.get(entry.activity_id)
+      if (!days) perDay.set(entry.activity_id, (days = new Map()))
+      days.set(entry.day, (days.get(entry.day) ?? 0) + entry.amount)
     }
-    this.renderToday(byToday, byYesterday, daysDone)
+
+    this.renderRingCluster(perDay)
+    this.renderNudge(perDay)
+    this.renderToday(perDay)
     this.renderList(recent)
   }
 
-  // per-activity totals are the headline; the cross-activity sum is a small corner note
-  private renderToday(
-    byToday: Map<string, number>,
-    byYesterday: Map<string, number>,
-    daysDone: Map<string, Set<string>>,
-  ) {
+  private dayKey(offset: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() - offset)
+    return localDateString(d)
+  }
+
+  private amountOn(perDay: Map<string, Map<string, number>>, id: string, offset: number): number {
+    return perDay.get(id)?.get(this.dayKey(offset)) ?? 0
+  }
+
+  // ring target: your typical active day over the trailing week (mean of nonzero
+  // days, yesterday back 7) — rest days don't dilute it, hot days raise it
+  private ringTarget(perDay: Map<string, Map<string, number>>, id: string): number {
+    const amounts: number[] = []
+    for (let offset = 1; offset <= 7; offset++) {
+      const amount = this.amountOn(perDay, id, offset)
+      if (amount > 0) amounts.push(amount)
+    }
+    if (amounts.length === 0) return 0
+    return Math.round(amounts.reduce((sum, v) => sum + v, 0) / amounts.length)
+  }
+
+  private ringActivities(): Activity[] {
+    return RING_ACTIVITIES.map((name) => this.activities.find((a) => a.name === name)).filter(
+      (a): a is Activity => a !== undefined,
+    )
+  }
+
+  private renderRingCluster(perDay: Map<string, Map<string, number>>) {
+    const rings = this.ringActivities().map((activity) => {
+      const today = this.amountOn(perDay, activity.id, 0)
+      const target = activity.kind === 'habit' ? 1 : this.ringTarget(perDay, activity.id)
+      const pct =
+        target === 0 ? (today > 0 ? 100 : 0) : Math.min(Math.round((today / target) * 100), 100)
+      return { cls: seriesClass(this.activities.indexOf(activity)), pct }
+    })
+
+    if (rings.length === 0) {
+      this.ringsTarget.hidden = true
+      return
+    }
+    const overall = Math.round(rings.reduce((sum, ring) => sum + ring.pct, 0) / rings.length)
+    // markup is built from numbers only — no user content
+    this.ringsTarget.innerHTML = renderRings(rings, overall)
+    this.ringsTarget.hidden = false
+  }
+
+  // one line, highest-leverage: a streak in danger beats a near-target beats silence
+  private renderNudge(perDay: Map<string, Map<string, number>>) {
+    let text = ''
+
+    for (const activity of this.activities) {
+      if (activity.kind !== 'habit') continue
+      if (this.amountOn(perDay, activity.id, 0) > 0) continue
+      let streak = 0
+      while (this.amountOn(perDay, activity.id, streak + 1) > 0) streak++
+      if (streak >= 2) {
+        text = `🔥 ${activity.name}: ${streak}-day streak on the line`
+        break
+      }
+    }
+
+    if (!text) {
+      let best: { activity: Activity; remaining: number; ratio: number } | null = null
+      for (const activity of this.activities) {
+        if (activity.kind === 'habit') continue
+        const today = this.amountOn(perDay, activity.id, 0)
+        const yesterday = this.amountOn(perDay, activity.id, 1)
+        if (yesterday === 0 || today >= yesterday) continue
+        const remaining = yesterday - today
+        const ratio = remaining / yesterday
+        if (!best || ratio < best.ratio) best = { activity, remaining, ratio }
+      }
+      // only nudge when the finish line is close enough to feel reachable
+      if (best && best.ratio <= 0.5) {
+        text = `${best.remaining} more ${best.activity.unit} beats yesterday — ${best.activity.name}`
+      }
+    }
+
+    this.nudgeTarget.textContent = text
+    this.nudgeTarget.hidden = !text
+  }
+
+  // per-activity totals are the headline; ring members listed first, in ring order
+  private renderToday(perDay: Map<string, Map<string, number>>) {
     if (this.activities.length === 0) {
       this.todayTarget.replaceChildren()
       this.grandTotalTarget.hidden = true
       return
     }
 
+    const ringMembers = this.ringActivities()
+    const ordered = [...ringMembers, ...this.activities.filter((a) => !ringMembers.includes(a))]
+
     this.todayTarget.replaceChildren(
-      ...this.activities.map((activity, i) => {
-        const today = byToday.get(activity.id) ?? 0
-        const yesterday = byYesterday.get(activity.id) ?? 0
+      ...ordered.map((activity) => {
+        const i = this.activities.indexOf(activity)
+        const today = this.amountOn(perDay, activity.id, 0)
+        const yesterday = this.amountOn(perDay, activity.id, 1)
         const isHabit = activity.kind === 'habit'
 
         const row = document.createElement('div')
@@ -122,10 +205,15 @@ export default class HistoryController extends Controller {
           unit.textContent = activity.unit
           name.append(unit)
         }
+
+        const side = document.createElement('span')
+        side.className = 'today-side'
         const delta = isHabit
-          ? streakLabel(daysDone.get(activity.id) ?? new Set(), today > 0)
+          ? streakLabel(perDay.get(activity.id) ?? new Map(), today > 0)
           : deltaLabel(today, yesterday)
-        row.append(count, name, delta)
+        side.append(delta, this.renderStrip(perDay, activity, i))
+
+        row.append(count, name, side)
         return row
       }),
     )
@@ -135,7 +223,7 @@ export default class HistoryController extends Controller {
     const byUnit = new Map<string, number>()
     let active = 0
     for (const activity of this.activities) {
-      const total = byToday.get(activity.id) ?? 0
+      const total = this.amountOn(perDay, activity.id, 0)
       if (total === 0 || activity.kind === 'habit') continue
       active++
       byUnit.set(activity.unit, (byUnit.get(activity.unit) ?? 0) + total)
@@ -144,6 +232,35 @@ export default class HistoryController extends Controller {
       .map(([unit, total]) => `${total} ${unit}`)
       .join(' · ')
     this.grandTotalTarget.hidden = active < 2
+  }
+
+  // 7 day-cells, oldest→today, opacity scaled to the activity's own best of the week
+  private renderStrip(
+    perDay: Map<string, Map<string, number>>,
+    activity: Activity,
+    seriesIndex: number,
+  ): HTMLElement {
+    const strip = document.createElement('span')
+    strip.className = 'strip'
+    const amounts: number[] = []
+    for (let offset = STRIP_DAYS - 1; offset >= 0; offset--) {
+      amounts.push(this.amountOn(perDay, activity.id, offset))
+    }
+    const max = Math.max(...amounts)
+    for (const amount of amounts) {
+      const cell = document.createElement('span')
+      if (amount === 0) {
+        cell.className = 'strip-cell off'
+      } else {
+        cell.className = `strip-cell ${seriesClass(seriesIndex)}`
+        if (activity.kind !== 'habit') {
+          const ratio = amount / max
+          cell.style.opacity = ratio < 0.5 ? '0.4' : ratio < 0.85 ? '0.7' : '1'
+        }
+      }
+      strip.appendChild(cell)
+    }
+    return strip
   }
 
   private renderList(entries: Entry[]) {
@@ -178,9 +295,9 @@ export default class HistoryController extends Controller {
     remove.className = 'ghost'
     remove.textContent = '−'
     remove.setAttribute('aria-label', 'Delete entry')
-    remove.dataset.action = 'history#delete'
-    remove.dataset.historyIdParam = entry.id
-    remove.dataset.historyKindParam = entry.kind
+    remove.dataset.action = 'dashboard#delete'
+    remove.dataset.dashboardIdParam = entry.id
+    remove.dataset.dashboardKindParam = entry.kind
 
     item.append(label, time, remove)
     return item
@@ -203,14 +320,14 @@ function progressColor(today: number, yesterday: number): string {
 }
 
 // habit motivation is the streak: growing when done today, "on the line" when not
-function streakLabel(daysDone: Set<string>, doneToday: boolean): HTMLElement {
+function streakLabel(days: Map<string, number>, doneToday: boolean): HTMLElement {
   const label = document.createElement('span')
   label.className = 'today-delta'
 
   let streak = 0
   const cursor = new Date()
   if (!doneToday) cursor.setDate(cursor.getDate() - 1)
-  while (daysDone.has(localDateString(cursor))) {
+  while ((days.get(localDateString(cursor)) ?? 0) > 0) {
     streak++
     cursor.setDate(cursor.getDate() - 1)
   }
