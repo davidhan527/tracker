@@ -45,3 +45,11 @@ document.getElementById('signout')!.addEventListener('click', () => {
   // local scope: sign out this device only — the default 'global' revokes every device
   void supabase.auth.signOut({ scope: 'local' })
 })
+
+const logSheet = document.getElementById('log-sheet') as HTMLDialogElement
+document.getElementById('open-log')!.addEventListener('click', () => logSheet.showModal())
+document.getElementById('close-log')!.addEventListener('click', () => logSheet.close())
+// clicking the dimmed backdrop closes the sheet; inside the panel event targets are children
+logSheet.addEventListener('click', (event) => {
+  if (event.target === logSheet) logSheet.close()
+})

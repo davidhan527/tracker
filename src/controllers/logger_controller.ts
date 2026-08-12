@@ -89,8 +89,8 @@ export default class LoggerController extends Controller {
       this.statusTarget.textContent = `Could not log: ${error}`
       return false
     }
-    // backdated entries may not show in the recent list, so confirm explicitly
-    this.statusTarget.textContent = pastDay ? `Logged ${amount} for ${pastDay}.` : ''
+    // the sheet covers the dashboard, so always confirm the log in place
+    this.statusTarget.textContent = pastDay ? `Logged ${amount} for ${pastDay}.` : `Logged ${amount} ✓`
     window.dispatchEvent(new CustomEvent('entries:changed'))
     return true
   }

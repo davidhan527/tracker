@@ -48,112 +48,127 @@
         <button type="button" id="signout" class="ghost">Sign out</button>
       </header>
 
-      <section class="card" data-controller="logger">
-        <label for="activity-picker">Activity</label>
-        <select
-          id="activity-picker"
-          data-activities-target="picker"
-          data-logger-target="picker"
-          data-action="change->activities#select"
-        ></select>
+      <div data-controller="history">
+        <section class="card">
+          <div class="card-head">
+            <h2>Today</h2>
+            <span class="muted small" data-history-target="grandTotal" hidden></span>
+          </div>
+          <div class="today-rows" data-history-target="today"></div>
+        </section>
 
-        <div data-logger-target="counted">
-          <div class="quick-row">
-            <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="5">+5</button>
-            <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="10">+10</button>
-            <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="15">+15</button>
-            <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="20">+20</button>
+        <section class="card" data-controller="chart">
+          <h2 data-chart-target="heading">Last 30 days</h2>
+          <div class="chart-wrap">
+            <div data-chart-target="container"></div>
+            <div class="chart-tooltip" data-chart-target="tooltip" hidden></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Recent</h2>
+          <ul class="entries" data-history-target="list"></ul>
+          <p class="muted" data-history-target="empty">Nothing logged yet.</p>
+        </section>
+      </div>
+
+      <button type="button" id="open-log" class="fab" aria-label="Log activity">＋</button>
+
+      <dialog id="log-sheet" class="sheet">
+        <div class="sheet-head">
+          <h2>Log</h2>
+          <button type="button" id="close-log" class="ghost" aria-label="Close">✕</button>
+        </div>
+
+        <section data-controller="logger">
+          <label for="activity-picker">Activity</label>
+          <select
+            id="activity-picker"
+            data-activities-target="picker"
+            data-logger-target="picker"
+            data-action="change->activities#select"
+          ></select>
+
+          <div data-logger-target="counted">
+            <div class="quick-row">
+              <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="5">+5</button>
+              <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="10">+10</button>
+              <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="15">+15</button>
+              <button type="button" class="quick" data-action="logger#quick" data-logger-reps-param="20">+20</button>
+            </div>
+
+            <form class="inline-form" data-action="submit->logger#add">
+              <input
+                type="number"
+                min="1"
+                max="10000"
+                inputmode="numeric"
+                placeholder="Reps"
+                required
+                aria-label="Reps"
+                data-logger-target="input"
+              />
+              <button type="submit" class="primary">Log</button>
+            </form>
           </div>
 
-          <form class="inline-form" data-action="submit->logger#add">
+          <button
+            type="button"
+            class="primary habit-mark"
+            data-logger-target="habitButton"
+            data-action="logger#markDone"
+            hidden
+          >
+            Mark today done ✓
+          </button>
+
+          <details
+            class="backdate"
+            data-logger-target="details"
+            data-action="toggle->logger#toggleBackdate"
+          >
+            <summary>Log a past day</summary>
+            <label for="log-date">Date</label>
+            <input id="log-date" type="date" data-logger-target="date" />
+            <p class="muted small">While a date is set, every log above is saved to that day.</p>
+          </details>
+          <p class="status" role="status" data-logger-target="status"></p>
+        </section>
+
+        <details class="backdate">
+          <summary>Add an activity</summary>
+          <form data-action="submit->activities#create">
             <input
-              type="number"
-              min="1"
-              max="10000"
-              inputmode="numeric"
-              placeholder="Reps"
+              id="new-activity"
+              type="text"
+              maxlength="60"
+              placeholder="e.g. Dune, Pickleball"
               required
-              aria-label="Reps"
-              data-logger-target="input"
+              aria-label="Name"
+              data-activities-target="name"
             />
-            <button type="submit" class="primary">Log</button>
+            <div class="inline-form">
+              <select
+                aria-label="Kind"
+                class="unit-select"
+                data-activities-target="kind"
+                data-action="change->activities#kindChanged"
+              >
+                <option value="exercise" selected>exercise</option>
+                <option value="book">book</option>
+                <option value="habit">habit (yes/no)</option>
+              </select>
+              <select aria-label="Unit" class="unit-select" data-activities-target="unit">
+                <option value="reps" selected>reps</option>
+                <option value="minutes">minutes</option>
+                <option value="km">km</option>
+              </select>
+              <button type="submit" class="grow">Add</button>
+            </div>
+            <p class="status" role="status" data-activities-target="status"></p>
           </form>
-        </div>
-
-        <button
-          type="button"
-          class="primary habit-mark"
-          data-logger-target="habitButton"
-          data-action="logger#markDone"
-          hidden
-        >
-          Mark today done ✓
-        </button>
-
-        <details
-          class="backdate"
-          data-logger-target="details"
-          data-action="toggle->logger#toggleBackdate"
-        >
-          <summary>Log a past day</summary>
-          <label for="log-date">Date</label>
-          <input id="log-date" type="date" data-logger-target="date" />
-          <p class="muted small">While a date is set, every log above is saved to that day.</p>
         </details>
-        <p class="status" role="status" data-logger-target="status"></p>
-      </section>
-
-      <section class="card" data-controller="chart">
-        <h2 data-chart-target="heading">Last 30 days</h2>
-        <div class="chart-wrap">
-          <div data-chart-target="container"></div>
-          <div class="chart-tooltip" data-chart-target="tooltip" hidden></div>
-        </div>
-      </section>
-
-      <section class="card" data-controller="history">
-        <div class="card-head">
-          <h2>Today</h2>
-          <span class="muted small" data-history-target="grandTotal" hidden></span>
-        </div>
-        <div class="today-rows" data-history-target="today"></div>
-        <h2>Recent</h2>
-        <ul class="entries" data-history-target="list"></ul>
-        <p class="muted" data-history-target="empty">Nothing logged yet.</p>
-      </section>
-
-      <section class="card">
-        <form data-action="submit->activities#create">
-          <label for="new-activity">Add an activity</label>
-          <input
-            id="new-activity"
-            type="text"
-            maxlength="60"
-            placeholder="e.g. Dune, Pickleball"
-            required
-            data-activities-target="name"
-          />
-          <div class="inline-form">
-            <select
-              aria-label="Kind"
-              class="unit-select"
-              data-activities-target="kind"
-              data-action="change->activities#kindChanged"
-            >
-              <option value="exercise" selected>exercise</option>
-              <option value="book">book</option>
-              <option value="habit">habit (yes/no)</option>
-            </select>
-            <select aria-label="Unit" class="unit-select" data-activities-target="unit">
-              <option value="reps" selected>reps</option>
-              <option value="minutes">minutes</option>
-              <option value="km">km</option>
-            </select>
-            <button type="submit" class="grow">Add</button>
-          </div>
-          <p class="status" role="status" data-activities-target="status"></p>
-        </form>
-      </section>
+      </dialog>
     </main>
 
     <script type="module" src="/src/main.ts"></script>

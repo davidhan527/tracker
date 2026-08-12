@@ -216,6 +216,52 @@ button.quick {
   font-size: 1.05rem;
 }
 
+.fab {
+  position: fixed;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  right: max(1.25rem, calc(50% - 14rem + 1.25rem));
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 0;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+}
+
+.sheet {
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  color: var(--text);
+  padding: 1.1rem;
+  width: 100%;
+  max-width: 28rem;
+  margin: auto auto 0;
+  max-height: 85dvh;
+  overflow-y: auto;
+  padding-bottom: calc(1.1rem + env(safe-area-inset-bottom));
+}
+
+.sheet::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.sheet-head h2 {
+  margin: 0;
+}
+
 .status {
   min-height: 1.2rem;
   margin: 0.6rem 0 0;
