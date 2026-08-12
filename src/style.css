@@ -22,7 +22,11 @@
   --series-4: #eda100;
   --series-5: #e87ba4;
   --series-6: #4a8f22;
+  --series-7: #4a3aa7;
   --series-other: #6d7683;
+  /* the matrix summary row: a magnitude, not an identity — held apart from the
+     activity hues so it never reads as one more series */
+  --summary: #d0568a;
 
   /* beat-yesterday ramp: amber at zero, blue at parity, jade past it */
   --progress-zero: #b7791f;
@@ -90,7 +94,9 @@
     --series-4: #c98500;
     --series-5: #d55181;
     --series-6: #6fbf3f;
+    --series-7: #9085e9;
     --series-other: #8b94a3;
+    --summary: #d55181;
 
     --progress-zero: #d9a441;
     --progress-match: #6ea8fe;
@@ -637,8 +643,9 @@ button.quick {
 .chart-s4 { --series-color: var(--series-4); }
 .chart-s5 { --series-color: var(--series-5); }
 .chart-s6 { --series-color: var(--series-6); }
+.chart-s7 { --series-color: var(--series-7); }
 .chart-s-other { --series-color: var(--series-other); }
-.mx-all { --series-color: color-mix(in oklab, var(--text) 42%, var(--surface)); }
+.mx-all { --series-color: var(--summary); }
 
 .legend-swatch {
   width: 8px;

@@ -12,8 +12,11 @@ export const HERO_EXCLUDED = ['Pickleball']
 // hero entirely — rings, rows and nudges. (Pickleball flares up tennis elbow.)
 export const REST_AFTER = [{ skip: 'Chin-ups', habit: 'Pickleball' }]
 
-// Pin an activity to a specific palette slot (1-6). Everything else takes the
+// Pin an activity to a specific palette slot (1-7). Everything else takes the
 // next free slot in creation order, so pinning one name never shifts the others.
+// The chain that has to stay legible is the matrix column order:
+// Bible → Pushups → Chin-ups → Pickleball → All(summary).
 export const COLOR_OVERRIDES: Record<string, number> = {
-  Bible: 5, // magenta — violet/blue collide with Pushups in the ring stack
+  Bible: 3, // teal
+  Pickleball: 7, // violet — magenta here would collide with Chin-ups coral
 }

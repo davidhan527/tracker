@@ -1,6 +1,6 @@
 import { COLOR_OVERRIDES } from './config'
 
-export const MAX_SERIES = 6 // palette slots; activities beyond this share the neutral slot
+export const MAX_SERIES = 7 // palette slots; activities beyond this share the neutral slot
 
 export function seriesClass(index: number): string {
   return index < MAX_SERIES ? `chart-s${index + 1}` : 'chart-s-other'
