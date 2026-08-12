@@ -11,6 +11,14 @@ const STRIP_DAYS = 7
 // activities not yet created simply have no ring until they exist
 const RING_ACTIVITIES = ['Bible', 'Pushups', 'Chin-ups']
 
+// tracked but not a headline: kept out of the hero card's rows (still in the
+// matrix, recent list, and nudges)
+const HERO_EXCLUDED = ['Pickleball']
+
+// recovery rules: the day after the habit was done, the named activity
+// disappears from the hero entirely — rings, rows, and nudges (tennis elbow)
+const REST_AFTER = [{ skip: 'Chin-ups', habit: 'Pickleball' }]
+
 export default class DashboardController extends Controller {
   static targets = ['nudge', 'rings', 'today', 'grandTotal', 'list', 'empty']
 
@@ -102,14 +110,24 @@ export default class DashboardController extends Controller {
     return Math.round(amounts.reduce((sum, v) => sum + v, 0) / amounts.length)
   }
 
-  private ringActivities(): Activity[] {
-    return RING_ACTIVITIES.map((name) => this.activities.find((a) => a.name === name)).filter(
-      (a): a is Activity => a !== undefined,
-    )
+  private restingNames(perDay: Map<string, Map<string, number>>): Set<string> {
+    const resting = new Set<string>()
+    for (const rule of REST_AFTER) {
+      const habit = this.activities.find((a) => a.name === rule.habit)
+      if (habit && this.amountOn(perDay, habit.id, 1) > 0) resting.add(rule.skip)
+    }
+    return resting
+  }
+
+  private ringActivities(perDay: Map<string, Map<string, number>>): Activity[] {
+    const resting = this.restingNames(perDay)
+    return RING_ACTIVITIES.filter((name) => !resting.has(name))
+      .map((name) => this.activities.find((a) => a.name === name))
+      .filter((a): a is Activity => a !== undefined)
   }
 
   private renderRingCluster(perDay: Map<string, Map<string, number>>) {
-    const rings = this.ringActivities().map((activity) => {
+    const rings = this.ringActivities(perDay).map((activity) => {
       const today = this.amountOn(perDay, activity.id, 0)
       const target = activity.kind === 'habit' ? 1 : this.ringTarget(perDay, activity.id)
       const pct =
@@ -143,9 +161,10 @@ export default class DashboardController extends Controller {
     }
 
     if (!text) {
+      const resting = this.restingNames(perDay)
       let best: { activity: Activity; remaining: number; ratio: number } | null = null
       for (const activity of this.activities) {
-        if (activity.kind === 'habit') continue
+        if (activity.kind === 'habit' || resting.has(activity.name)) continue
         const today = this.amountOn(perDay, activity.id, 0)
         const yesterday = this.amountOn(perDay, activity.id, 1)
         if (yesterday === 0 || today >= yesterday) continue
@@ -171,8 +190,13 @@ export default class DashboardController extends Controller {
       return
     }
 
-    const ringMembers = this.ringActivities()
-    const ordered = [...ringMembers, ...this.activities.filter((a) => !ringMembers.includes(a))]
+    const resting = this.restingNames(perDay)
+    const hidden = new Set([...HERO_EXCLUDED, ...resting])
+    const ringMembers = this.ringActivities(perDay)
+    const ordered = [
+      ...ringMembers,
+      ...this.activities.filter((a) => !ringMembers.includes(a) && !hidden.has(a.name)),
+    ]
 
     this.todayTarget.replaceChildren(
       ...ordered.map((activity) => {
