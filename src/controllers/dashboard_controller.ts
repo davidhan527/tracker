@@ -11,8 +11,8 @@ const STRIP_DAYS = 7
 // activities not yet created simply have no ring until they exist
 const RING_ACTIVITIES = ['Bible', 'Pushups', 'Chin-ups']
 
-// tracked but not a headline: kept out of the hero card's rows (still in the
-// matrix, recent list, and nudges)
+// tracked but not a headline: kept out of the hero card's rows and nudges
+// entirely (still in the matrix, recent list, and log sheet)
 const HERO_EXCLUDED = ['Pickleball']
 
 // recovery rules: the day after the habit was done, the named activity
@@ -150,7 +150,7 @@ export default class DashboardController extends Controller {
     let text = ''
 
     for (const activity of this.activities) {
-      if (activity.kind !== 'habit') continue
+      if (activity.kind !== 'habit' || HERO_EXCLUDED.includes(activity.name)) continue
       if (this.amountOn(perDay, activity.id, 0) > 0) continue
       let streak = 0
       while (this.amountOn(perDay, activity.id, streak + 1) > 0) streak++
