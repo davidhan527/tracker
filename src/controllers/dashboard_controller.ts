@@ -40,15 +40,38 @@ export default class DashboardController extends Controller {
   // last rendered totals, so a number that just grew can flash
   private previous = new Map<string, number>()
   private primed = false
+  private renderedDay = ''
+  private midnightTimer = 0
+  private generation = 0
 
   connect() {
     window.addEventListener('activities:changed', this.onActivities)
     window.addEventListener('entries:changed', this.onEntries)
+    // an installed PWA is resumed, not reloaded: without these the app can show
+    // yesterday's rings — completion check and all — on a brand new morning
+    document.addEventListener('visibilitychange', this.onWake)
+    window.addEventListener('pageshow', this.onWake)
   }
 
   disconnect() {
     window.removeEventListener('activities:changed', this.onActivities)
     window.removeEventListener('entries:changed', this.onEntries)
+    document.removeEventListener('visibilitychange', this.onWake)
+    window.removeEventListener('pageshow', this.onWake)
+    clearTimeout(this.midnightTimer)
+  }
+
+  private onWake = () => {
+    if (document.visibilityState !== 'visible') return
+    if (this.renderedDay && this.renderedDay !== localDateString(new Date())) void this.refresh()
+  }
+
+  // also covers the app being left open across midnight, where no resume fires
+  private armMidnight() {
+    clearTimeout(this.midnightTimer)
+    const next = new Date()
+    next.setHours(24, 0, 5, 0)
+    this.midnightTimer = window.setTimeout(() => void this.refresh(), next.getTime() - Date.now())
   }
 
   async delete(event: Event) {
@@ -89,7 +112,10 @@ export default class DashboardController extends Controller {
       return
     }
 
+    // a slow response must never overwrite a newer one
+    const generation = ++this.generation
     const [entries, recent] = await Promise.all([allEntries(), recentEntries(RECENT_LIMIT)])
+    if (generation !== this.generation) return
 
     // per-activity, per-day totals: one aggregation feeds rings, rows, strips,
     // streaks, records and the matrix — the whole app reads from this
@@ -108,8 +134,11 @@ export default class DashboardController extends Controller {
       let best: Best | null = null
       let bestBefore = 0
       for (const [day, amount] of days) {
-        // >= so a tie resolves to the most recent day — that's the one worth marking
-        if (!best || amount >= best.amount) best = { day, amount }
+        // compare days explicitly: Map order is row-arrival order, not chronological,
+        // so a tie must be broken on the date itself (YYYY-MM-DD sorts correctly)
+        if (!best || amount > best.amount || (amount === best.amount && day > best.day)) {
+          best = { day, amount }
+        }
         if (day !== todayKey && amount > bestBefore) bestBefore = amount
       }
       if (best) this.best.set(id, best)
@@ -129,6 +158,8 @@ export default class DashboardController extends Controller {
     this.renderRecap(perDay)
     this.renderList(recent)
     this.primed = true
+    this.renderedDay = todayKey
+    this.armMidnight()
   }
 
   private dayKey(offset: number): string {
@@ -202,9 +233,11 @@ export default class DashboardController extends Controller {
   // near-target beats silence
   private renderNudge(perDay: Map<string, Map<string, number>>) {
     let text = ''
+    // a resting activity is off the hero entirely — it must not speak here either
+    const muted = new Set([...HERO_EXCLUDED, ...this.restingNames(perDay)])
 
     for (const activity of this.activities) {
-      if (!this.records.has(activity.id) || HERO_EXCLUDED.includes(activity.name)) continue
+      if (!this.records.has(activity.id) || muted.has(activity.name)) continue
       const previous = this.bestBefore(perDay, activity.id)
       text = `Personal best — ${this.amountOn(perDay, activity.id, 0)} ${activity.unit} of ${activity.name}, past ${previous}`
       break
@@ -217,7 +250,7 @@ export default class DashboardController extends Controller {
     }
 
     for (const activity of this.activities) {
-      if (activity.kind !== 'habit' || HERO_EXCLUDED.includes(activity.name)) continue
+      if (activity.kind !== 'habit' || muted.has(activity.name)) continue
       if (this.amountOn(perDay, activity.id, 0) > 0) continue
       let streak = 0
       while (this.amountOn(perDay, activity.id, streak + 1) > 0) streak++
@@ -228,10 +261,9 @@ export default class DashboardController extends Controller {
     }
 
     if (!text) {
-      const resting = this.restingNames(perDay)
       let best: { activity: Activity; remaining: number; ratio: number } | null = null
       for (const activity of this.activities) {
-        if (activity.kind === 'habit' || resting.has(activity.name)) continue
+        if (activity.kind === 'habit' || muted.has(activity.name)) continue
         const today = this.amountOn(perDay, activity.id, 0)
         const yesterday = this.amountOn(perDay, activity.id, 1)
         if (yesterday === 0 || today >= yesterday) continue

@@ -62,6 +62,8 @@ export default class LoggerController extends Controller {
   toggleBackdate() {
     // closing the disclosure clears the date so quick-logs can't silently stay backdated
     if (!this.detailsTarget.open) this.dateTarget.value = ''
+    // re-stamp on open: connect() ran once, and the app survives across midnight
+    else this.dateTarget.max = localDateString(new Date())
   }
 
   private onActivities = (event: Event) => {

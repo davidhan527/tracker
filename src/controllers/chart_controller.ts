@@ -185,7 +185,8 @@ export default class ChartController extends Controller {
     this.appendCells(summary, keys, (key, i) => {
       const cell = document.createElement('span')
       const count = counts[i]
-      const level = count === 0 ? 0 : count === 1 ? 1 : count < ordered.length ? 2 : 3
+      // completeness wins the test, else a single-activity day never reaches full
+      const level = count === 0 ? 0 : count === ordered.length ? 3 : count === 1 ? 1 : 2
       cell.className = level === 0 ? 'mx-cell off' : `mx-cell lvl-${level}`
       cell.dataset.tip = `${formatDay(key)} · ${count} of ${ordered.length} active`
       return cell
@@ -217,13 +218,14 @@ export default class ChartController extends Controller {
     const pad = document.createElement('span')
     pad.className = 'mx-label'
     row.appendChild(pad)
-    this.appendCells(row, keys, (key) => {
+    this.appendCells(row, keys, (key, index) => {
       const tick = document.createElement('span')
       tick.className = 'mx-tick'
       // every week starts on a Sunday now, so the dates line up with the gaps
       if (ChartController.dayOfWeek(key) === 0) {
         const text = document.createElement('span')
-        text.className = 'mx-tick-text'
+        // on a Sunday the newest week is one column wide, so anchor it right
+        text.className = index === keys.length - 1 ? 'mx-tick-text end' : 'mx-tick-text'
         text.textContent = formatDay(key)
         tick.appendChild(text)
       }
