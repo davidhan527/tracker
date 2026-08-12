@@ -1,5 +1,4 @@
 import { Controller } from '@hotwired/stimulus'
-import { supabase } from '../lib/supabase'
 import {
   MAX_SERIES,
   formatDay,
@@ -10,6 +9,7 @@ import {
   stackedDailyTotals,
   type StackedDay,
 } from '../lib/chart'
+import { entriesSince } from '../lib/data'
 import type { Activity } from '../types'
 
 const MAX_DAYS = 30
@@ -58,11 +58,7 @@ export default class ChartController extends Controller {
 
     const today = new Date()
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (MAX_DAYS - 1))
-    const { data, error } = await supabase
-      .from('entries')
-      .select('amount, created_at, activity_id')
-      .gte('created_at', start.toISOString())
-    if (error) return
+    const entries = await entriesSince(start)
 
     // series slot = position in the activity list (stable), so colors never repaint
     const hasOther = this.activities.length > MAX_SERIES
@@ -72,9 +68,11 @@ export default class ChartController extends Controller {
       .map((activity) => ({ name: activity.name, unit: activity.unit, kind: activity.kind }))
     if (hasOther) this.series.push({ name: 'Other', unit: '', kind: 'exercise' }) // mixed — leave unlabeled
 
-    const rows = ((data ?? []) as { amount: number; created_at: string; activity_id: string }[]).map(
-      (row) => ({ amount: row.amount, created_at: row.created_at, series: slotFor.get(row.activity_id) ?? -1 }),
-    )
+    const rows = entries.map((entry) => ({
+      amount: entry.amount,
+      day: entry.day,
+      series: slotFor.get(entry.activity_id) ?? -1,
+    }))
 
     // window grows with history (7 → 30 days) so young data isn't lost in empty space
     const days = this.windowFor(rows, today)
@@ -138,14 +136,12 @@ export default class ChartController extends Controller {
     )
   }
 
-  private windowFor(rows: { created_at: string }[], today: Date): number {
+  private windowFor(rows: { day: string }[], today: Date): number {
     if (rows.length === 0) return MAX_DAYS
-    const earliest = rows.reduce(
-      (min, row) => Math.min(min, new Date(row.created_at).getTime()),
-      Infinity,
-    )
+    const earliest = rows.reduce((min, row) => (row.day < min ? row.day : min), rows[0].day)
+    const [year, month, day] = earliest.split('-').map(Number)
     const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const span = Math.floor((startOfToday.getTime() - earliest) / 86_400_000) + 1
+    const span = Math.floor((startOfToday.getTime() - new Date(year, month - 1, day).getTime()) / 86_400_000) + 1
     return Math.min(Math.max(span, MIN_DAYS), MAX_DAYS)
   }
 

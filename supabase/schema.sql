@@ -1,55 +1,98 @@
 -- Fresh install: run everything below in the Supabase SQL editor.
+-- Each vertical (exercises / books / habits) owns its tables; the app's UI
+-- consolidates them client-side.
 
-create table public.activities (
+create table public.exercises (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
   unit text not null default 'reps' check (char_length(unit) between 1 and 20),
-  kind text not null default 'exercise' check (kind in ('exercise', 'book', 'habit')),
   created_at timestamptz not null default now(),
   unique (user_id, name)
 );
 
-create table public.entries (
+create table public.books (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  activity_id uuid not null references public.activities (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 60),
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+create table public.habits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 60),
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+create table public.exercise_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  exercise_id uuid not null references public.exercises (id) on delete cascade,
   amount integer not null check (amount between 1 and 10000),
   created_at timestamptz not null default now()
 );
 
-create index entries_user_created_idx on public.entries (user_id, created_at desc);
+create table public.book_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  book_id uuid not null references public.books (id) on delete cascade,
+  pages integer not null check (pages between 1 and 10000),
+  created_at timestamptz not null default now()
+);
 
-alter table public.activities enable row level security;
-alter table public.entries enable row level security;
+create table public.habit_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  habit_id uuid not null references public.habits (id) on delete cascade,
+  done_on date not null default current_date,
+  created_at timestamptz not null default now(),
+  unique (habit_id, done_on) -- habits are yes/no per day at the database level
+);
 
-create policy "own activities select" on public.activities for select using (auth.uid() = user_id);
-create policy "own activities insert" on public.activities for insert with check (auth.uid() = user_id);
-create policy "own activities update" on public.activities for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "own activities delete" on public.activities for delete using (auth.uid() = user_id);
+create index exercise_entries_user_created_idx on public.exercise_entries (user_id, created_at desc);
+create index book_entries_user_created_idx on public.book_entries (user_id, created_at desc);
+create index habit_entries_user_done_idx on public.habit_entries (user_id, done_on desc);
 
-create policy "own entries select" on public.entries for select using (auth.uid() = user_id);
-create policy "own entries insert" on public.entries for insert with check (auth.uid() = user_id);
-create policy "own entries update" on public.entries for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "own entries delete" on public.entries for delete using (auth.uid() = user_id);
+alter table public.exercises enable row level security;
+alter table public.books enable row level security;
+alter table public.habits enable row level security;
+alter table public.exercise_entries enable row level security;
+alter table public.book_entries enable row level security;
+alter table public.habit_entries enable row level security;
+
+create policy "own rows" on public.exercises for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.books for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.habits for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.exercise_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.book_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.habit_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
--- Migration from the original exercise-tracker schema (run INSTEAD of the above
--- if your database already has the exercises/entries tables):
+-- Migration from the unified activities/entries schema (2026-08). Run the
+-- CREATE statements above first, then this copy block. Ids are preserved.
+-- NOTE the timezone in the habit copy — adjust if you are not in US Eastern.
 --
--- alter table public.exercises rename to activities;
--- alter table public.entries rename column exercise_id to activity_id;
--- alter table public.entries rename column reps to amount;
+-- insert into public.exercises (id, user_id, name, unit, created_at)
+--   select id, user_id, name, unit, created_at from public.activities where kind = 'exercise';
+-- insert into public.books (id, user_id, name, created_at)
+--   select id, user_id, name, created_at from public.activities where kind = 'book';
+-- insert into public.habits (id, user_id, name, created_at)
+--   select id, user_id, name, created_at from public.activities where kind = 'habit';
 --
--- If the unit column was never added:
--- alter table public.activities add column unit text not null default 'reps' check (char_length(unit) between 1 and 20);
+-- insert into public.exercise_entries (id, user_id, exercise_id, amount, created_at)
+--   select e.id, e.user_id, e.activity_id, e.amount, e.created_at
+--   from public.entries e join public.activities a on a.id = e.activity_id where a.kind = 'exercise';
+-- insert into public.book_entries (id, user_id, book_id, pages, created_at)
+--   select e.id, e.user_id, e.activity_id, e.amount, e.created_at
+--   from public.entries e join public.activities a on a.id = e.activity_id where a.kind = 'book';
+-- insert into public.habit_entries (id, user_id, habit_id, done_on, created_at)
+--   select e.id, e.user_id, e.activity_id, (e.created_at at time zone 'America/New_York')::date, e.created_at
+--   from public.entries e join public.activities a on a.id = e.activity_id where a.kind = 'habit'
+--   on conflict (habit_id, done_on) do nothing;
 --
--- Kind column (added 2026-08; existing rows default to exercise — update books by hand):
--- alter table public.activities add column kind text not null default 'exercise' check (kind in ('exercise', 'book', 'habit'));
--- update public.activities set kind = 'book' where unit = 'pages';
---
--- Optional cosmetic cleanup (policy names keep working either way):
--- alter policy "own exercises select" on public.activities rename to "own activities select";
--- alter policy "own exercises insert" on public.activities rename to "own activities insert";
--- alter policy "own exercises update" on public.activities rename to "own activities update";
--- alter policy "own exercises delete" on public.activities rename to "own activities delete";
+-- After the new app is deployed and verified:
+-- drop table public.entries;
+-- drop table public.activities;

@@ -1,6 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 import { localDateString } from '../lib/chart'
-import { supabase } from '../lib/supabase'
+import { logEntry } from '../lib/data'
 import type { Activity } from '../types'
 
 export default class LoggerController extends Controller {
@@ -13,8 +13,7 @@ export default class LoggerController extends Controller {
   declare readonly countedTarget: HTMLElement
   declare readonly habitButtonTarget: HTMLButtonElement
 
-  private activityId: string | null = null
-  private isHabit = false
+  private activity: Activity | null = null
 
   connect() {
     window.addEventListener('activities:changed', this.onActivities)
@@ -37,6 +36,27 @@ export default class LoggerController extends Controller {
     if (await this.log(amount)) this.inputTarget.value = ''
   }
 
+  // idempotence is the DB's job now: unique(habit_id, done_on) reports a conflict
+  async markDone() {
+    if (!this.activity) return
+    const pastDay = this.dateTarget.value || null
+
+    this.setBusy(true)
+    const { error, conflict } = await logEntry(this.activity, 1, pastDay)
+    this.setBusy(false)
+
+    if (error) {
+      this.statusTarget.textContent = `Could not mark: ${error}`
+      return
+    }
+    if (conflict) {
+      this.statusTarget.textContent = `Already marked for ${pastDay ?? 'today'} ✓`
+      return
+    }
+    this.statusTarget.textContent = pastDay ? `Marked ${pastDay} done ✓` : 'Done ✓'
+    window.dispatchEvent(new CustomEvent('entries:changed'))
+  }
+
   toggleBackdate() {
     // closing the disclosure clears the date so quick-logs can't silently stay backdated
     if (!this.detailsTarget.open) this.dateTarget.value = ''
@@ -44,68 +64,29 @@ export default class LoggerController extends Controller {
 
   private onActivities = (event: Event) => {
     const detail = (event as CustomEvent<{ activities: Activity[]; selectedId: string | null }>).detail
-    this.activityId = detail.selectedId
-    const activity = detail.activities.find((candidate) => candidate.id === this.activityId)
-    this.isHabit = activity?.kind === 'habit'
-    this.countedTarget.hidden = this.isHabit
-    this.habitButtonTarget.hidden = !this.isHabit
-    const unit = activity?.unit ?? 'reps'
+    this.activity = detail.activities.find((candidate) => candidate.id === detail.selectedId) ?? null
+    const isHabit = this.activity?.kind === 'habit'
+    this.countedTarget.hidden = isHabit
+    this.habitButtonTarget.hidden = !isHabit
+    const unit = this.activity?.unit ?? 'reps'
     const label = unit.charAt(0).toUpperCase() + unit.slice(1)
     this.inputTarget.placeholder = label
     this.inputTarget.setAttribute('aria-label', label)
   }
 
-  // habits are yes/no per day: at most one entry, so marking twice is a no-op
-  async markDone() {
-    if (!this.activityId) return
-    const day = this.dateTarget.value || localDateString(new Date())
-    const [year, month, dayOfMonth] = day.split('-').map(Number)
-    const dayStart = new Date(year, month - 1, dayOfMonth)
-    const dayEnd = new Date(year, month - 1, dayOfMonth + 1)
-
-    this.setBusy(true)
-    const existing = await supabase
-      .from('entries')
-      .select('id')
-      .eq('activity_id', this.activityId)
-      .gte('created_at', dayStart.toISOString())
-      .lt('created_at', dayEnd.toISOString())
-      .limit(1)
-    if ((existing.data ?? []).length > 0) {
-      this.setBusy(false)
-      this.statusTarget.textContent = `Already marked for ${this.dateTarget.value ? day : 'today'} ✓`
-      return
-    }
-    this.setBusy(false)
-
-    if (await this.log(1)) {
-      this.statusTarget.textContent = this.dateTarget.value ? `Marked ${day} done ✓` : 'Done ✓'
-    }
-  }
-
   private async log(amount: number): Promise<boolean> {
-    if (!this.activityId) {
+    if (!this.activity) {
       this.statusTarget.textContent = 'Pick an activity first.'
       return false
     }
 
-    const row: { activity_id: string; amount: number; created_at?: string } = {
-      activity_id: this.activityId,
-      amount,
-    }
-    const pastDay = this.dateTarget.value
-    if (pastDay) {
-      const [year, month, day] = pastDay.split('-').map(Number)
-      // noon local keeps the entry on the picked calendar day in nearby timezones
-      row.created_at = new Date(year, month - 1, day, 12).toISOString()
-    }
-
+    const pastDay = this.dateTarget.value || null
     this.setBusy(true)
-    const { error } = await supabase.from('entries').insert(row)
+    const { error } = await logEntry(this.activity, amount, pastDay)
     this.setBusy(false)
 
     if (error) {
-      this.statusTarget.textContent = `Could not log: ${error.message}`
+      this.statusTarget.textContent = `Could not log: ${error}`
       return false
     }
     // backdated entries may not show in the recent list, so confirm explicitly

@@ -26,7 +26,7 @@ export function localDateString(date: Date): string {
 }
 
 export function stackedDailyTotals(
-  rows: { amount: number; created_at: string; series: number }[],
+  rows: { amount: number; day: string; series: number }[],
   seriesCount: number,
   days: number,
   today: Date = new Date(),
@@ -37,7 +37,7 @@ export function stackedDailyTotals(
     buckets.set(localDateString(d), new Array(seriesCount).fill(0))
   }
   for (const row of rows) {
-    const bucket = buckets.get(localDateString(new Date(row.created_at)))
+    const bucket = buckets.get(row.day)
     if (bucket && row.series >= 0 && row.series < seriesCount) bucket[row.series] += row.amount
   }
   return [...buckets.entries()].map(([date, values]) => ({ date, values }))

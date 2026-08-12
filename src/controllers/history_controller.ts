@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
-import { localDateString, seriesClass } from '../lib/chart'
-import { supabase } from '../lib/supabase'
-import type { Activity, Entry } from '../types'
+import { formatDay, localDateString, seriesClass } from '../lib/chart'
+import { deleteEntry, entriesSince, recentEntries } from '../lib/data'
+import type { Activity, Entry, Kind } from '../types'
 
 const RECENT_LIMIT = 20
 const STREAK_WINDOW = 30
@@ -28,9 +28,8 @@ export default class HistoryController extends Controller {
   }
 
   async delete(event: Event) {
-    const { id } = (event as unknown as { params: { id: string } }).params
-    const { error } = await supabase.from('entries').delete().eq('id', id)
-    if (!error) window.dispatchEvent(new CustomEvent('entries:changed'))
+    const { id, kind } = (event as unknown as { params: { id: string; kind: Kind } }).params
+    if (await deleteEntry(kind, id)) window.dispatchEvent(new CustomEvent('entries:changed'))
   }
 
   private onActivities = (event: Event) => {
@@ -53,40 +52,32 @@ export default class HistoryController extends Controller {
 
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
-    const startOfYesterday = new Date(startOfToday)
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1)
     // wide window so habit streaks can be counted, not just today/yesterday
     const windowStart = new Date(startOfToday)
     windowStart.setDate(windowStart.getDate() - (STREAK_WINDOW - 1))
 
-    const [window, recent] = await Promise.all([
-      supabase
-        .from('entries')
-        .select('amount, activity_id, created_at')
-        .gte('created_at', windowStart.toISOString()),
-      supabase
-        .from('entries')
-        .select('id, activity_id, amount, created_at')
-        .order('created_at', { ascending: false })
-        .limit(RECENT_LIMIT),
-    ])
+    const [window, recent] = await Promise.all([entriesSince(windowStart), recentEntries(RECENT_LIMIT)])
+
+    const todayKey = localDateString(startOfToday)
+    const yesterday = new Date(startOfToday)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayKey = localDateString(yesterday)
 
     const byToday = new Map<string, number>()
     const byYesterday = new Map<string, number>()
     const daysDone = new Map<string, Set<string>>()
-    for (const row of (window.data ?? []) as Pick<Entry, 'amount' | 'activity_id' | 'created_at'>[]) {
-      const when = new Date(row.created_at)
-      if (when >= startOfToday) {
-        byToday.set(row.activity_id, (byToday.get(row.activity_id) ?? 0) + row.amount)
-      } else if (when >= startOfYesterday) {
-        byYesterday.set(row.activity_id, (byYesterday.get(row.activity_id) ?? 0) + row.amount)
+    for (const entry of window) {
+      if (entry.day === todayKey) {
+        byToday.set(entry.activity_id, (byToday.get(entry.activity_id) ?? 0) + entry.amount)
+      } else if (entry.day === yesterdayKey) {
+        byYesterday.set(entry.activity_id, (byYesterday.get(entry.activity_id) ?? 0) + entry.amount)
       }
-      let days = daysDone.get(row.activity_id)
-      if (!days) daysDone.set(row.activity_id, (days = new Set()))
-      days.add(localDateString(when))
+      let days = daysDone.get(entry.activity_id)
+      if (!days) daysDone.set(entry.activity_id, (days = new Set()))
+      days.add(entry.day)
     }
     this.renderToday(byToday, byYesterday, daysDone)
-    this.renderList((recent.data ?? []) as Entry[])
+    this.renderList(recent)
   }
 
   // per-activity totals are the headline; the cross-activity sum is a small corner note
@@ -167,8 +158,8 @@ export default class HistoryController extends Controller {
     label.className = 'entry-label'
     const activity = this.byId.get(entry.activity_id)
     label.textContent =
-      activity?.kind === 'habit'
-        ? `✓ ${activity.name}`
+      entry.kind === 'habit'
+        ? `✓ ${activity?.name ?? '?'}`
         : activity && activity.unit !== 'reps'
           ? `${entry.amount} ${activity.unit} · ${activity.name}`
           : `${entry.amount} × ${activity?.name ?? '?'}`
@@ -176,7 +167,11 @@ export default class HistoryController extends Controller {
     const time = document.createElement('time')
     time.className = 'muted'
     time.dateTime = entry.created_at
-    time.textContent = timeAgo(entry.created_at)
+    // a backdated habit mark belongs to its day, not to when it was tapped
+    time.textContent =
+      entry.kind === 'habit' && entry.day !== localDateString(new Date())
+        ? formatDay(entry.day)
+        : timeAgo(entry.created_at)
 
     const remove = document.createElement('button')
     remove.type = 'button'
@@ -185,6 +180,7 @@ export default class HistoryController extends Controller {
     remove.setAttribute('aria-label', 'Delete entry')
     remove.dataset.action = 'history#delete'
     remove.dataset.historyIdParam = entry.id
+    remove.dataset.historyKindParam = entry.kind
 
     item.append(label, time, remove)
     return item

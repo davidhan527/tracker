@@ -1,7 +1,8 @@
 import { Controller } from '@hotwired/stimulus'
 import type { Session } from '@supabase/supabase-js'
+import { createActivity, loadActivities } from '../lib/data'
 import { supabase } from '../lib/supabase'
-import type { Activity } from '../types'
+import type { Activity, Kind } from '../types'
 
 export default class ActivitiesController extends Controller {
   static targets = ['picker', 'name', 'unit', 'kind', 'status']
@@ -29,12 +30,10 @@ export default class ActivitiesController extends Controller {
     this.broadcast()
   }
 
-  // kind drives the sensible default unit; habits are per-day yes/no, no unit choice
+  // only exercises choose a unit; books are always pages, habits are yes/no days
   kindChanged() {
-    const kind = this.kindTarget.value
-    this.unitTarget.hidden = kind === 'habit'
-    if (kind === 'exercise') this.unitTarget.value = 'reps'
-    if (kind === 'book') this.unitTarget.value = 'pages'
+    this.unitTarget.hidden = this.kindTarget.value !== 'exercise'
+    if (this.kindTarget.value === 'exercise') this.unitTarget.value = 'reps'
   }
 
   async create(event: SubmitEvent) {
@@ -43,26 +42,19 @@ export default class ActivitiesController extends Controller {
     if (!name) return
 
     this.statusTarget.textContent = ''
-    const kind = this.kindTarget.value || 'exercise'
-    const unit = kind === 'habit' ? 'days' : this.unitTarget.value || 'reps'
-    const { data, error } = await supabase
-      .from('activities')
-      .insert({ name, unit, kind })
-      .select()
-      .single()
-    if (error) {
+    const kind = (this.kindTarget.value || 'exercise') as Kind
+    const { activity, error } = await createActivity(kind, name, this.unitTarget.value || 'reps')
+    if (error || !activity) {
       this.statusTarget.textContent =
-        error.code === '23505'
+        error?.code === '23505'
           ? 'You are already tracking that.'
-          : error.code === 'PGRST204'
-            ? 'Run the kind-column migration from supabase/schema.sql first.'
-            : `Could not add: ${error.message}`
+          : `Could not add: ${error?.message ?? 'unknown error'}`
       return
     }
 
     this.nameTarget.value = ''
-    this.activities = [...this.activities, normalize(data)]
-    this.render((data as Activity).id)
+    this.activities = [...this.activities, activity]
+    this.render(activity.id)
   }
 
   private onSession = (event: Event) => {
@@ -78,23 +70,21 @@ export default class ActivitiesController extends Controller {
   }
 
   private async load() {
-    // select * with client-side defaults, so the app keeps working while a new
-    // column's migration hasn't run yet (learned that one the hard way)
-    const { data, error } = await supabase.from('activities').select('*').order('created_at')
+    const { activities, error } = await loadActivities()
     if (error) {
-      this.statusTarget.textContent = `Could not load activities: ${error.message}`
+      this.statusTarget.textContent = `Could not load activities: ${error}`
       return
     }
 
-    let activities = (data ?? []).map(normalize)
-    if (activities.length === 0) {
+    let items = activities
+    if (items.length === 0) {
       // first run for this account; unique(user_id, name) makes a duplicate insert harmless
-      const seeded = await supabase.from('activities').insert({ name: 'Pushups' }).select()
-      activities = (seeded.data ?? []).map(normalize)
+      const seeded = await createActivity('exercise', 'Pushups', 'reps')
+      if (seeded.activity) items = [seeded.activity]
     }
 
-    this.activities = activities
-    this.render(activities[0]?.id)
+    this.activities = items
+    this.render(items[0]?.id)
   }
 
   private clear() {
@@ -123,9 +113,4 @@ export default class ActivitiesController extends Controller {
       }),
     )
   }
-}
-
-function normalize(row: unknown): Activity {
-  const activity = row as Activity
-  return { ...activity, unit: activity.unit ?? 'reps', kind: activity.kind ?? 'exercise' }
 }
