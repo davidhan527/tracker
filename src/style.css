@@ -730,6 +730,76 @@ button.quick {
   box-shadow: inset 0 1px 0 var(--hairline);
 }
 
+/* week boundary: the gap is what makes a column read as a weekday */
+.mx-gap {
+  flex: 0 0 6px;
+}
+
+.mx-weekdays {
+  margin-bottom: var(--sp-1);
+}
+
+.mx-weekday {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  font-size: var(--fs-0);
+  line-height: 1;
+  color: var(--text-faint);
+}
+
+.mx-activity {
+  cursor: pointer;
+  border-radius: var(--r-1);
+  padding: 3px 0;
+  transition: background-color var(--dur-fast) ease;
+}
+
+.mx-activity.is-open {
+  background: var(--accent-soft);
+}
+
+.mx-activity .mx-label::after {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: 4px;
+  vertical-align: 1px;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.5;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.mx-activity.is-open .mx-label::after {
+  transform: rotate(180deg);
+}
+
+/* an all-time best day, marked inside the cell so it never overlaps a neighbour */
+.mx-cell.is-record {
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--text) 85%, transparent);
+}
+
+.mx-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0 0 var(--sp-2) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-1);
+  border-left: 3px solid var(--series-color);
+  background: var(--accent-soft);
+  font-size: var(--fs-1);
+  animation: slide-fade-in var(--dur-fast) var(--ease-out);
+}
+
+.mx-chip-key {
+  color: var(--text-faint);
+  margin-right: 0.35rem;
+}
+
 .mx-ticks {
   margin-bottom: 0;
 }
@@ -764,6 +834,59 @@ button.quick {
   pointer-events: none;
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
   z-index: 3;
+}
+
+/* --- weekly recap ------------------------------------------------------- */
+
+.recap-card {
+  border-left: 3px solid var(--summary);
+}
+
+.recap-lead {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-2);
+  font-weight: 500;
+}
+
+.recap-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.recap-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+
+.recap-row + .recap-row {
+  box-shadow: inset 0 1px 0 var(--hairline);
+}
+
+.recap-name {
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recap-value {
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+
+.recap-delta {
+  font-size: var(--fs-1);
+  color: var(--text-faint);
+  min-width: 3.2rem;
+  text-align: right;
+}
+
+.recap-delta.up {
+  color: var(--state-ahead);
+  font-weight: 500;
 }
 
 /* --- recent ------------------------------------------------------------ */

@@ -9,6 +9,17 @@ export interface Activity {
   created_at: string
 }
 
+export interface Best {
+  day: string // YYYY-MM-DD
+  amount: number
+}
+
+// derived once by the dashboard and broadcast, so both cards share one fetch
+export interface Stats {
+  perDay: Map<string, Map<string, number>> // activityId -> day -> total
+  best: Map<string, Best> // activityId -> all-time best day
+}
+
 // unified client-side view over the three entry tables
 export interface Entry {
   id: string

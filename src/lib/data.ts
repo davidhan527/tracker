@@ -117,6 +117,12 @@ export async function entriesSince(since: Date): Promise<Entry[]> {
   ]
 }
 
+// Everything, ever. Personal records need the whole history, and one user's
+// tracker stays comfortably small — this is a handful of KB for years of data.
+export async function allEntries(): Promise<Entry[]> {
+  return entriesSince(new Date(2000, 0, 1))
+}
+
 export async function recentEntries(limit: number): Promise<Entry[]> {
   const results = await Promise.all(
     KINDS.map((kind) =>

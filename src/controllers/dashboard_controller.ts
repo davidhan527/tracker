@@ -1,15 +1,25 @@
 import { Controller } from '@hotwired/stimulus'
 import { assignSeriesClasses, formatDay, localDateString, renderRings } from '../lib/chart'
 import { HERO_EXCLUDED, REST_AFTER, RING_ACTIVITIES } from '../lib/config'
-import { deleteEntry, entriesSince, recentEntries } from '../lib/data'
-import type { Activity, Entry, Kind } from '../types'
+import { allEntries, deleteEntry, recentEntries } from '../lib/data'
+import type { Activity, Best, Entry, Kind } from '../types'
 
 const RECENT_LIMIT = 20
-const WINDOW = 30
 const STRIP_DAYS = 7
 
 export default class DashboardController extends Controller {
-  static targets = ['nudge', 'rings', 'today', 'grandTotal', 'list', 'empty', 'dayLabel']
+  static targets = [
+    'nudge',
+    'rings',
+    'today',
+    'grandTotal',
+    'list',
+    'empty',
+    'dayLabel',
+    'recap',
+    'recapRows',
+    'recapLead',
+  ]
 
   declare readonly nudgeTarget: HTMLElement
   declare readonly dayLabelTarget: HTMLElement
@@ -18,10 +28,15 @@ export default class DashboardController extends Controller {
   declare readonly grandTotalTarget: HTMLElement
   declare readonly listTarget: HTMLUListElement
   declare readonly emptyTarget: HTMLElement
+  declare readonly recapTarget: HTMLElement
+  declare readonly recapRowsTarget: HTMLElement
+  declare readonly recapLeadTarget: HTMLElement
 
   private activities: Activity[] = []
   private byId = new Map<string, Activity>()
   private colors = new Map<string, string>()
+  private best = new Map<string, Best>()
+  private records = new Set<string>() // activities that set an all-time best today
   // last rendered totals, so a number that just grew can flash
   private previous = new Map<string, number>()
   private primed = false
@@ -70,27 +85,48 @@ export default class DashboardController extends Controller {
       this.renderList([])
       this.ringsTarget.hidden = true
       this.nudgeTarget.hidden = true
+      this.recapTarget.hidden = true
       return
     }
 
-    const startOfToday = new Date()
-    startOfToday.setHours(0, 0, 0, 0)
-    const windowStart = new Date(startOfToday)
-    windowStart.setDate(windowStart.getDate() - (WINDOW - 1))
+    const [entries, recent] = await Promise.all([allEntries(), recentEntries(RECENT_LIMIT)])
 
-    const [window_, recent] = await Promise.all([entriesSince(windowStart), recentEntries(RECENT_LIMIT)])
-
-    // per-activity, per-day totals: one aggregation feeds rings, rows, strips, streaks
+    // per-activity, per-day totals: one aggregation feeds rings, rows, strips,
+    // streaks, records and the matrix — the whole app reads from this
     const perDay = new Map<string, Map<string, number>>()
-    for (const entry of window_) {
+    for (const entry of entries) {
       let days = perDay.get(entry.activity_id)
       if (!days) perDay.set(entry.activity_id, (days = new Map()))
       days.set(entry.day, (days.get(entry.day) ?? 0) + entry.amount)
     }
 
+    const todayKey = localDateString(new Date())
+    this.best = new Map()
+    this.records = new Set()
+    for (const [id, days] of perDay) {
+      if (this.byId.get(id)?.kind === 'habit') continue // a habit day is always 1
+      let best: Best | null = null
+      let bestBefore = 0
+      for (const [day, amount] of days) {
+        // >= so a tie resolves to the most recent day — that's the one worth marking
+        if (!best || amount >= best.amount) best = { day, amount }
+        if (day !== todayKey && amount > bestBefore) bestBefore = amount
+      }
+      if (best) this.best.set(id, best)
+      // a first-ever day isn't a record — there was nothing to beat
+      const todayAmount = days.get(todayKey) ?? 0
+      if (bestBefore > 0 && todayAmount > bestBefore) this.records.add(id)
+    }
+
+    // the matrix reads the same aggregation rather than fetching its own copy
+    window.dispatchEvent(
+      new CustomEvent('stats:changed', { detail: { perDay, best: this.best } }),
+    )
+
     this.renderRingCluster(perDay)
     this.renderNudge(perDay)
     this.renderToday(perDay)
+    this.renderRecap(perDay)
     this.renderList(recent)
     this.primed = true
   }
@@ -115,6 +151,16 @@ export default class DashboardController extends Controller {
     }
     if (amounts.length === 0) return 0
     return Math.round(amounts.reduce((sum, v) => sum + v, 0) / amounts.length)
+  }
+
+  // the best day that is not today — what a record has to beat
+  private bestBefore(perDay: Map<string, Map<string, number>>, id: string): number {
+    const todayKey = localDateString(new Date())
+    let best = 0
+    for (const [day, amount] of perDay.get(id) ?? []) {
+      if (day !== todayKey && amount > best) best = amount
+    }
+    return best
   }
 
   private restingNames(perDay: Map<string, Map<string, number>>): Set<string> {
@@ -152,9 +198,23 @@ export default class DashboardController extends Controller {
     this.ringsTarget.hidden = false
   }
 
-  // one line, highest-leverage: a streak in danger beats a near-target beats silence
+  // one line, highest-leverage: a record beats a streak in danger beats a
+  // near-target beats silence
   private renderNudge(perDay: Map<string, Map<string, number>>) {
     let text = ''
+
+    for (const activity of this.activities) {
+      if (!this.records.has(activity.id) || HERO_EXCLUDED.includes(activity.name)) continue
+      const previous = this.bestBefore(perDay, activity.id)
+      text = `Personal best — ${this.amountOn(perDay, activity.id, 0)} ${activity.unit} of ${activity.name}, past ${previous}`
+      break
+    }
+
+    if (text) {
+      this.nudgeTarget.textContent = text
+      this.nudgeTarget.hidden = false
+      return
+    }
 
     for (const activity of this.activities) {
       if (activity.kind !== 'habit' || HERO_EXCLUDED.includes(activity.name)) continue
@@ -244,8 +304,10 @@ export default class DashboardController extends Controller {
         const delta = isHabit
           ? streakText(perDay.get(activity.id) ?? new Map(), today > 0)
           : deltaText(today, yesterday)
-        if (delta.up) sub.classList.add('up')
-        sub.textContent = delta.text
+        const isRecord = this.records.has(activity.id)
+        if (isRecord) row.classList.add('is-record')
+        if (isRecord || delta.up) sub.classList.add('up')
+        sub.textContent = isRecord ? 'personal best' : delta.text
         meta.append(name, sub)
 
         row.append(count, meta, this.renderStrip(perDay, activity))
@@ -267,6 +329,71 @@ export default class DashboardController extends Controller {
       .map(([unit, total]) => `${total} ${unit}`)
       .join(' · ')
     this.grandTotalTarget.hidden = active < 2
+  }
+
+  // a Monday ritual: the seven days ending yesterday, against the seven before that
+  private renderRecap(perDay: Map<string, Map<string, number>>) {
+    if (new Date().getDay() !== 1) {
+      this.recapTarget.hidden = true
+      return
+    }
+
+    const total = (id: string, from: number, to: number) => {
+      let sum = 0
+      for (let offset = from; offset <= to; offset++) sum += this.amountOn(perDay, id, offset)
+      return sum
+    }
+
+    let beaten = 0
+    let compared = 0
+    const rows = this.activities.flatMap((activity) => {
+      const last = total(activity.id, 1, 7)
+      const prior = total(activity.id, 8, 14)
+      if (last === 0 && prior === 0) return []
+      if (prior > 0) {
+        compared++
+        if (last > prior) beaten++
+      }
+
+      const row = document.createElement('div')
+      row.className = 'recap-row'
+      const swatch = document.createElement('span')
+      swatch.className = `legend-swatch ${this.colorOf(activity)}`
+      const name = document.createElement('span')
+      name.className = 'recap-name'
+      name.textContent = activity.name // user-named — textContent, never innerHTML
+      const value = document.createElement('span')
+      value.className = 'recap-value'
+      value.textContent =
+        activity.kind === 'habit'
+          ? `${last} ${unitLabel(last, 'days')}`
+          : `${last} ${unitLabel(last, activity.unit)}`
+      const delta = document.createElement('span')
+      delta.className = 'recap-delta'
+      if (prior === 0) {
+        delta.textContent = 'new'
+      } else {
+        const change = Math.round(((last - prior) / prior) * 100)
+        delta.textContent = change > 0 ? `+${change}%` : `${change}%`
+        if (change > 0) delta.classList.add('up')
+      }
+      row.append(swatch, name, value, delta)
+      return [row]
+    })
+
+    if (rows.length === 0) {
+      this.recapTarget.hidden = true
+      return
+    }
+
+    this.recapLeadTarget.textContent =
+      compared === 0
+        ? 'Your first week on the board.'
+        : beaten === compared
+          ? `You beat the week before on all ${compared}.`
+          : `You beat the week before on ${beaten} of ${compared}.`
+    this.recapRowsTarget.replaceChildren(...rows)
+    this.recapTarget.hidden = false
   }
 
   // 7 day-cells, oldest→today, height scaled to the activity's own best of the week
@@ -311,7 +438,7 @@ export default class DashboardController extends Controller {
       entry.kind === 'habit'
         ? `${activity?.name ?? '?'}`
         : activity && activity.unit !== 'reps'
-          ? `${entry.amount} ${activity.unit} · ${activity.name}`
+          ? `${entry.amount} ${unitLabel(entry.amount, activity.unit)} · ${activity.name}`
           : `${entry.amount} × ${activity?.name ?? '?'}`
 
     const time = document.createElement('time')
@@ -376,6 +503,11 @@ function deltaText(today: number, yesterday: number): { text: string; up: boolea
   if (diff > 0) return { text: `+${diff} vs yesterday`, up: true }
   if (diff < 0) return { text: `${-diff} to match yesterday`, up: false }
   return { text: 'matched yesterday', up: false }
+}
+
+// units are stored plural; only the display needs the singular
+function unitLabel(amount: number, unit: string): string {
+  return amount === 1 && unit.endsWith('s') ? unit.slice(0, -1) : unit
 }
 
 function timeAgo(iso: string): string {
