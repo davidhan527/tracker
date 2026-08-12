@@ -1,7 +1,9 @@
 import { Controller } from '@hotwired/stimulus'
-import { localDateString } from '../lib/chart'
+import { assignSeriesClasses, localDateString } from '../lib/chart'
 import { logEntry } from '../lib/data'
 import type { Activity } from '../types'
+
+const SERIES_CLASSES = /\bchart-s[\w-]+/g
 
 export default class LoggerController extends Controller {
   static targets = ['picker', 'input', 'status', 'details', 'date', 'counted', 'habitButton']
@@ -65,6 +67,11 @@ export default class LoggerController extends Controller {
   private onActivities = (event: Event) => {
     const detail = (event as CustomEvent<{ activities: Activity[]; selectedId: string | null }>).detail
     this.activity = detail.activities.find((candidate) => candidate.id === detail.selectedId) ?? null
+    // the quick buttons wear the selected activity's colour, so the sheet always
+    // says what you are about to log
+    const colors = assignSeriesClasses(detail.activities)
+    const cls = this.activity ? (colors.get(this.activity.id) ?? '') : ''
+    this.element.className = `${this.element.className.replace(SERIES_CLASSES, '').trim()} ${cls}`.trim()
     const isHabit = this.activity?.kind === 'habit'
     this.countedTarget.hidden = isHabit
     this.habitButtonTarget.hidden = !isHabit

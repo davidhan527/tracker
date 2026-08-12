@@ -1,5 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
-import { formatDay, localDateString, renderRings, seriesClass } from '../lib/chart'
+import { assignSeriesClasses, formatDay, localDateString, renderRings } from '../lib/chart'
+import { HERO_EXCLUDED, REST_AFTER, RING_ACTIVITIES } from '../lib/config'
 import { deleteEntry, entriesSince, recentEntries } from '../lib/data'
 import type { Activity, Entry, Kind } from '../types'
 
@@ -7,22 +8,11 @@ const RECENT_LIMIT = 20
 const WINDOW = 30
 const STRIP_DAYS = 7
 
-// hardcoded ring lineup, outermost first (matched by exact activity name);
-// activities not yet created simply have no ring until they exist
-const RING_ACTIVITIES = ['Bible', 'Pushups', 'Chin-ups']
-
-// tracked but not a headline: kept out of the hero card's rows and nudges
-// entirely (still in the matrix, recent list, and log sheet)
-const HERO_EXCLUDED = ['Pickleball']
-
-// recovery rules: the day after the habit was done, the named activity
-// disappears from the hero entirely — rings, rows, and nudges (tennis elbow)
-const REST_AFTER = [{ skip: 'Chin-ups', habit: 'Pickleball' }]
-
 export default class DashboardController extends Controller {
-  static targets = ['nudge', 'rings', 'today', 'grandTotal', 'list', 'empty']
+  static targets = ['nudge', 'rings', 'today', 'grandTotal', 'list', 'empty', 'dayLabel']
 
   declare readonly nudgeTarget: HTMLElement
+  declare readonly dayLabelTarget: HTMLElement
   declare readonly ringsTarget: HTMLElement
   declare readonly todayTarget: HTMLElement
   declare readonly grandTotalTarget: HTMLElement
@@ -31,6 +21,10 @@ export default class DashboardController extends Controller {
 
   private activities: Activity[] = []
   private byId = new Map<string, Activity>()
+  private colors = new Map<string, string>()
+  // last rendered totals, so a number that just grew can flash
+  private previous = new Map<string, number>()
+  private primed = false
 
   connect() {
     window.addEventListener('activities:changed', this.onActivities)
@@ -51,6 +45,7 @@ export default class DashboardController extends Controller {
     const detail = (event as CustomEvent<{ activities: Activity[] }>).detail
     this.activities = detail.activities
     this.byId = new Map(detail.activities.map((activity) => [activity.id, activity]))
+    this.colors = assignSeriesClasses(detail.activities)
     void this.refresh()
   }
 
@@ -58,7 +53,18 @@ export default class DashboardController extends Controller {
     void this.refresh()
   }
 
+  private colorOf(activity: Activity): string {
+    return this.colors.get(activity.id) ?? 'chart-s-other'
+  }
+
   private async refresh() {
+    // the hero's title is the day itself — the app has no other masthead
+    this.dayLabelTarget.textContent = new Date().toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    })
+
     if (this.activities.length === 0) {
       this.renderToday(new Map())
       this.renderList([])
@@ -86,6 +92,7 @@ export default class DashboardController extends Controller {
     this.renderNudge(perDay)
     this.renderToday(perDay)
     this.renderList(recent)
+    this.primed = true
   }
 
   private dayKey(offset: number): string {
@@ -132,7 +139,7 @@ export default class DashboardController extends Controller {
       const target = activity.kind === 'habit' ? 1 : this.ringTarget(perDay, activity.id)
       const pct =
         target === 0 ? (today > 0 ? 100 : 0) : Math.min(Math.round((today / target) * 100), 100)
-      return { cls: seriesClass(this.activities.indexOf(activity)), pct }
+      return { cls: this.colorOf(activity), pct }
     })
 
     if (rings.length === 0) {
@@ -155,7 +162,7 @@ export default class DashboardController extends Controller {
       let streak = 0
       while (this.amountOn(perDay, activity.id, streak + 1) > 0) streak++
       if (streak >= 2) {
-        text = `🔥 ${activity.name}: ${streak}-day streak on the line`
+        text = `${activity.name}: ${streak}-day streak on the line`
         break
       }
     }
@@ -182,7 +189,7 @@ export default class DashboardController extends Controller {
     this.nudgeTarget.hidden = !text
   }
 
-  // per-activity totals are the headline; ring members listed first, in ring order
+  // per-activity totals are the headline; ring members lead, in ring order
   private renderToday(perDay: Map<string, Map<string, number>>) {
     if (this.activities.length === 0) {
       this.todayTarget.replaceChildren()
@@ -200,13 +207,16 @@ export default class DashboardController extends Controller {
 
     this.todayTarget.replaceChildren(
       ...ordered.map((activity) => {
-        const i = this.activities.indexOf(activity)
         const today = this.amountOn(perDay, activity.id, 0)
         const yesterday = this.amountOn(perDay, activity.id, 1)
         const isHabit = activity.kind === 'habit'
 
         const row = document.createElement('div')
         row.className = 'today-row'
+        // only flash after the first paint, so a page load isn't a fanfare
+        if (this.primed && today > (this.previous.get(activity.id) ?? 0)) row.classList.add('is-gain')
+        this.previous.set(activity.id, today)
+
         const count = document.createElement('span')
         count.className = 'today-count'
         if (isHabit) {
@@ -216,28 +226,29 @@ export default class DashboardController extends Controller {
           count.textContent = String(today)
           count.style.color = progressColor(today, yesterday)
         }
-        const name = document.createElement('span')
+
+        const meta = document.createElement('div')
+        meta.className = 'today-meta'
+        const name = document.createElement('p')
         name.className = 'today-name'
-        const swatch = document.createElement('span')
-        swatch.className = `legend-swatch ${seriesClass(i)}`
-        const text = document.createElement('span')
-        text.textContent = activity.name // user-named — textContent, never innerHTML
-        name.append(swatch, text)
+        name.textContent = activity.name // user-named — textContent, never innerHTML
+        // the unit rides the name so the sub-line stays short enough not to wrap
         if (!isHabit && activity.unit !== 'reps') {
           const unit = document.createElement('span')
-          unit.className = 'muted small'
-          unit.textContent = activity.unit
+          unit.className = 'today-unit'
+          unit.textContent = ` ${activity.unit}`
           name.append(unit)
         }
-
-        const side = document.createElement('span')
-        side.className = 'today-side'
+        const sub = document.createElement('p')
+        sub.className = 'today-sub'
         const delta = isHabit
-          ? streakLabel(perDay.get(activity.id) ?? new Map(), today > 0)
-          : deltaLabel(today, yesterday)
-        side.append(delta, this.renderStrip(perDay, activity, i))
+          ? streakText(perDay.get(activity.id) ?? new Map(), today > 0)
+          : deltaText(today, yesterday)
+        if (delta.up) sub.classList.add('up')
+        sub.textContent = delta.text
+        meta.append(name, sub)
 
-        row.append(count, name, side)
+        row.append(count, meta, this.renderStrip(perDay, activity))
         return row
       }),
     )
@@ -258,14 +269,10 @@ export default class DashboardController extends Controller {
     this.grandTotalTarget.hidden = active < 2
   }
 
-  // 7 day-cells, oldest→today, opacity scaled to the activity's own best of the week
-  private renderStrip(
-    perDay: Map<string, Map<string, number>>,
-    activity: Activity,
-    seriesIndex: number,
-  ): HTMLElement {
+  // 7 day-cells, oldest→today, height scaled to the activity's own best of the week
+  private renderStrip(perDay: Map<string, Map<string, number>>, activity: Activity): HTMLElement {
     const strip = document.createElement('span')
-    strip.className = 'strip'
+    strip.className = `strip ${this.colorOf(activity)}`
     const amounts: number[] = []
     for (let offset = STRIP_DAYS - 1; offset >= 0; offset--) {
       amounts.push(this.amountOn(perDay, activity.id, offset))
@@ -275,12 +282,11 @@ export default class DashboardController extends Controller {
       const cell = document.createElement('span')
       if (amount === 0) {
         cell.className = 'strip-cell off'
+      } else if (activity.kind === 'habit') {
+        cell.className = 'strip-cell lvl-3'
       } else {
-        cell.className = `strip-cell ${seriesClass(seriesIndex)}`
-        if (activity.kind !== 'habit') {
-          const ratio = amount / max
-          cell.style.opacity = ratio < 0.5 ? '0.4' : ratio < 0.85 ? '0.7' : '1'
-        }
+        const ratio = amount / max
+        cell.className = `strip-cell lvl-${ratio < 0.5 ? 1 : ratio < 0.85 ? 2 : 3}`
       }
       strip.appendChild(cell)
     }
@@ -294,13 +300,16 @@ export default class DashboardController extends Controller {
 
   private renderEntry(entry: Entry): HTMLLIElement {
     const item = document.createElement('li')
+    const activity = this.byId.get(entry.activity_id)
+
+    const dot = document.createElement('span')
+    dot.className = `legend-swatch ${activity ? this.colorOf(activity) : 'chart-s-other'}`
 
     const label = document.createElement('span')
     label.className = 'entry-label'
-    const activity = this.byId.get(entry.activity_id)
     label.textContent =
       entry.kind === 'habit'
-        ? `✓ ${activity?.name ?? '?'}`
+        ? `${activity?.name ?? '?'}`
         : activity && activity.unit !== 'reps'
           ? `${entry.amount} ${activity.unit} · ${activity.name}`
           : `${entry.amount} × ${activity?.name ?? '?'}`
@@ -323,7 +332,7 @@ export default class DashboardController extends Controller {
     remove.dataset.dashboardIdParam = entry.id
     remove.dataset.dashboardKindParam = entry.kind
 
-    item.append(label, time, remove)
+    item.append(dot, label, time, remove)
     return item
   }
 }
@@ -344,10 +353,7 @@ function progressColor(today: number, yesterday: number): string {
 }
 
 // habit motivation is the streak: growing when done today, "on the line" when not
-function streakLabel(days: Map<string, number>, doneToday: boolean): HTMLElement {
-  const label = document.createElement('span')
-  label.className = 'today-delta'
-
+function streakText(days: Map<string, number>, doneToday: boolean): { text: string; up: boolean } {
   let streak = 0
   const cursor = new Date()
   if (!doneToday) cursor.setDate(cursor.getDate() - 1)
@@ -356,33 +362,20 @@ function streakLabel(days: Map<string, number>, doneToday: boolean): HTMLElement
     cursor.setDate(cursor.getDate() - 1)
   }
 
-  if (doneToday) {
-    label.classList.add('up')
-    label.textContent = streak > 1 ? `${streak}-day streak` : 'done today'
-  } else if (streak > 0) {
-    label.textContent = streak > 1 ? `${streak}-day streak on the line` : 'done yesterday'
-  } else {
-    label.textContent = ''
+  if (doneToday) return { text: streak > 1 ? `${streak}-day streak` : 'done today', up: true }
+  if (streak > 0) {
+    return { text: streak > 1 ? `${streak}-day streak on the line` : 'done yesterday', up: false }
   }
-  return label
+  return { text: '', up: false }
 }
 
 // goal-framed: behind reads as a target to chase, never a deficit
-function deltaLabel(today: number, yesterday: number): HTMLElement {
-  const delta = document.createElement('span')
-  delta.className = 'today-delta'
+function deltaText(today: number, yesterday: number): { text: string; up: boolean } {
   const diff = today - yesterday
-  if (today === 0 && yesterday === 0) {
-    delta.textContent = ''
-  } else if (diff > 0) {
-    delta.classList.add('up')
-    delta.textContent = `+${diff} vs yesterday`
-  } else if (diff < 0) {
-    delta.textContent = `${-diff} to match yesterday`
-  } else {
-    delta.textContent = 'matched yesterday'
-  }
-  return delta
+  if (today === 0 && yesterday === 0) return { text: '', up: false }
+  if (diff > 0) return { text: `+${diff} vs yesterday`, up: true }
+  if (diff < 0) return { text: `${-diff} to match yesterday`, up: false }
+  return { text: 'matched yesterday', up: false }
 }
 
 function timeAgo(iso: string): string {

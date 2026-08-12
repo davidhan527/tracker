@@ -1,12 +1,12 @@
 import { Controller } from '@hotwired/stimulus'
-import { formatDay, localDateString, seriesClass } from '../lib/chart'
+import { assignSeriesClasses, formatDay, localDateString } from '../lib/chart'
+import { RING_ACTIVITIES } from '../lib/config'
 import { entriesSince } from '../lib/data'
 import type { Activity } from '../types'
 
 const MAX_DAYS = 30
-const MIN_DAYS = 7
-const CELL = 9 // px, matches .mx-cell
-const GAP = 2
+const MIN_DAYS = 21 // wider than the 7-day strips in the hero, so the two say different things
+const MIN_CELL = 11 // px per column including its gap, used only to pick the day count
 const LABEL = 64
 
 export default class ChartController extends Controller {
@@ -17,6 +17,7 @@ export default class ChartController extends Controller {
   declare readonly headingTarget: HTMLElement
 
   private activities: Activity[] = []
+  private colors = new Map<string, string>()
   private perDay = new Map<string, Map<string, number>>()
   private hasData = false
 
@@ -35,7 +36,9 @@ export default class ChartController extends Controller {
   }
 
   private onActivities = (event: Event) => {
-    this.activities = (event as CustomEvent<{ activities: Activity[] }>).detail.activities
+    const detail = (event as CustomEvent<{ activities: Activity[] }>).detail
+    this.activities = detail.activities
+    this.colors = assignSeriesClasses(detail.activities)
     void this.refresh()
   }
 
@@ -69,12 +72,18 @@ export default class ChartController extends Controller {
     this.render()
   }
 
+  // rings first, in ring order, so the matrix mirrors the hero card
+  private orderedActivities(): Activity[] {
+    const lead = RING_ACTIVITIES.map((name) => this.activities.find((a) => a.name === name)).filter(
+      (a): a is Activity => a !== undefined,
+    )
+    return [...lead, ...this.activities.filter((a) => !lead.includes(a))]
+  }
+
   private render() {
-    // window adapts to both the data span and the width the cells actually have
-    const capacity = Math.floor((this.containerTarget.clientWidth - LABEL - 4) / (CELL + GAP))
+    const capacity = Math.floor((this.containerTarget.clientWidth - LABEL - 4) / MIN_CELL)
     if (capacity < 1) return
-    const span = this.dataSpan()
-    const days = Math.max(Math.min(span, capacity, MAX_DAYS), Math.min(MIN_DAYS, capacity))
+    const days = Math.max(Math.min(capacity, MAX_DAYS), Math.min(MIN_DAYS, capacity))
     this.headingTarget.textContent = `Last ${days} days`
 
     const keys: string[] = []
@@ -84,26 +93,20 @@ export default class ChartController extends Controller {
       keys.push(localDateString(d))
     }
 
+    const ordered = this.orderedActivities()
     const rows: HTMLElement[] = []
 
-    // "All" summary row: how many activities were touched each day
-    const counts = keys.map(
-      (key) => this.activities.filter((a) => (this.perDay.get(a.id)?.get(key) ?? 0) > 0).length,
-    )
-    rows.push(
-      this.buildRow('All', 'mx-all', keys, counts, Math.max(...counts, 1), (key, count) => {
-        const label = `${formatDay(key)} · ${count} of ${this.activities.length} active`
-        return { level: count === 0 ? 0 : count === 1 ? 1 : count < this.activities.length ? 2 : 3, tip: label }
-      }),
-    )
-
-    for (const [i, activity] of this.activities.entries()) {
+    ordered.forEach((activity, index) => {
       const amounts = keys.map((key) => this.perDay.get(activity.id)?.get(key) ?? 0)
       const max = Math.max(...amounts, 1)
       rows.push(
-        this.buildRow(activity.name, seriesClass(i), keys, amounts, max, (key, amount) => {
+        this.buildRow(activity.name, this.colors.get(activity.id) ?? 'chart-s-other', index, keys, (key, i) => {
+          const amount = amounts[i]
           if (activity.kind === 'habit') {
-            return { level: amount > 0 ? 3 : 0, tip: `${formatDay(key)} · ${amount > 0 ? 'done ✓' : 'not done'} · ${activity.name}` }
+            return {
+              level: amount > 0 ? 3 : 0,
+              tip: `${formatDay(key)} · ${amount > 0 ? 'done' : 'not done'} · ${activity.name}`,
+            }
           }
           const ratio = amount / max
           return {
@@ -112,7 +115,18 @@ export default class ChartController extends Controller {
           }
         }),
       )
-    }
+    })
+
+    // summary last: it reads as a footer over the rows it sums, not a header
+    const counts = keys.map(
+      (key) => ordered.filter((a) => (this.perDay.get(a.id)?.get(key) ?? 0) > 0).length,
+    )
+    rows.push(
+      this.buildRow('All', 'mx-all', ordered.length, keys, (key, i) => ({
+        level: counts[i] === 0 ? 0 : counts[i] === 1 ? 1 : counts[i] < ordered.length ? 2 : 3,
+        tip: `${formatDay(key)} · ${counts[i]} of ${ordered.length} active`,
+      })),
+    )
 
     rows.push(this.buildTicks(keys))
     this.containerTarget.replaceChildren(...rows)
@@ -121,23 +135,21 @@ export default class ChartController extends Controller {
   private buildRow(
     name: string,
     colorClass: string,
+    rowIndex: number,
     keys: string[],
-    values: number[],
-    _max: number,
-    cellFor: (key: string, value: number) => { level: number; tip: string },
+    cellFor: (key: string, i: number) => { level: number; tip: string },
   ): HTMLElement {
     const row = document.createElement('div')
-    row.className = 'mx-row'
+    row.className = `mx-row ${colorClass}`
+    row.style.setProperty('--row', String(rowIndex))
     const label = document.createElement('span')
     label.className = 'mx-label'
     label.textContent = name // user-named — textContent, never innerHTML
     row.appendChild(label)
     keys.forEach((key, i) => {
-      const { level, tip } = cellFor(key, values[i])
+      const { level, tip } = cellFor(key, i)
       const cell = document.createElement('span')
-      cell.className = level === 0 ? 'mx-cell off' : `mx-cell ${colorClass}`
-      if (level === 1) cell.style.opacity = '0.4'
-      if (level === 2) cell.style.opacity = '0.7'
+      cell.className = level === 0 ? 'mx-cell off' : `mx-cell lvl-${level}`
       cell.dataset.tip = tip
       row.appendChild(cell)
     })
@@ -150,14 +162,12 @@ export default class ChartController extends Controller {
     const pad = document.createElement('span')
     pad.className = 'mx-label'
     row.appendChild(pad)
-    // weekly, anchored at the newest day: 7 cells ≈ 77px, always clear of collisions
-    const step = 7
     keys.forEach((key, i) => {
       const fromEnd = keys.length - 1 - i
       const tick = document.createElement('span')
       tick.className = 'mx-tick'
-      tick.style.width = `${CELL + GAP}px`
-      if (fromEnd % step === 0) {
+      // weekly, anchored at today, so the newest column is always labelled
+      if (fromEnd % 7 === 0) {
         const text = document.createElement('span')
         text.textContent = formatDay(key)
         text.className = fromEnd === 0 ? 'mx-tick-text end' : 'mx-tick-text'
@@ -166,22 +176,6 @@ export default class ChartController extends Controller {
       row.appendChild(tick)
     })
     return row
-  }
-
-  private dataSpan(): number {
-    let earliest: string | null = null
-    for (const days of this.perDay.values()) {
-      for (const day of days.keys()) {
-        if (!earliest || day < earliest) earliest = day
-      }
-    }
-    if (!earliest) return MIN_DAYS
-    const [year, month, day] = earliest.split('-').map(Number)
-    const startOfToday = new Date()
-    startOfToday.setHours(0, 0, 0, 0)
-    return (
-      Math.floor((startOfToday.getTime() - new Date(year, month - 1, day).getTime()) / 86_400_000) + 1
-    )
   }
 
   private onPointer = (event: PointerEvent) => {
