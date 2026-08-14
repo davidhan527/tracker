@@ -1,5 +1,12 @@
 import { Controller } from '@hotwired/stimulus'
-import { assignSeriesClasses, formatDay, localDateString, renderRings } from '../lib/chart'
+import {
+  assignSeriesClasses,
+  currentStreak,
+  formatDay,
+  localDateString,
+  renderRings,
+  streakTier,
+} from '../lib/chart'
 import { HERO_EXCLUDED, REST_AFTER, RING_ACTIVITIES } from '../lib/config'
 import { allEntries, deleteEntry, recentEntries } from '../lib/data'
 import type { Activity, Best, Entry, Kind } from '../types'
@@ -358,7 +365,7 @@ export default class DashboardController extends Controller {
       byUnit.set(activity.unit, (byUnit.get(activity.unit) ?? 0) + total)
     }
     this.grandTotalTarget.textContent = [...byUnit.entries()]
-      .map(([unit, total]) => `${total} ${unit}`)
+      .map(([unit, total]) => `${total} ${unitLabel(total, unit)}`)
       .join(' · ')
     this.grandTotalTarget.hidden = active < 2
   }
@@ -428,16 +435,25 @@ export default class DashboardController extends Controller {
     this.recapTarget.hidden = false
   }
 
-  // 7 day-cells, oldest→today, height scaled to the activity's own best of the week
+  // 7 day-cells, oldest→today, with consecutive days joined into one capsule
   private renderStrip(perDay: Map<string, Map<string, number>>, activity: Activity): HTMLElement {
+    const track = document.createElement('span')
+    track.className = `track ${this.colorOf(activity)}`
+
+    const streak = currentStreak(perDay.get(activity.id))
+    const tier = streakTier(streak.length)
+    if (tier > 0) track.classList.add(`streak-t${tier}`)
+
     const strip = document.createElement('span')
-    strip.className = `strip ${this.colorOf(activity)}`
+    strip.className = 'strip'
     const amounts: number[] = []
+    const keys: string[] = []
     for (let offset = STRIP_DAYS - 1; offset >= 0; offset--) {
       amounts.push(this.amountOn(perDay, activity.id, offset))
+      keys.push(this.dayKey(offset))
     }
     const max = Math.max(...amounts)
-    for (const amount of amounts) {
+    amounts.forEach((amount, i) => {
       const cell = document.createElement('span')
       if (amount === 0) {
         cell.className = 'strip-cell off'
@@ -447,9 +463,24 @@ export default class DashboardController extends Controller {
         const ratio = amount / max
         cell.className = `strip-cell lvl-${ratio < 0.5 ? 1 : ratio < 0.85 ? 2 : 3}`
       }
+      if (amount > 0) {
+        if (amounts[i - 1] > 0) cell.classList.add('run-l')
+        if (amounts[i + 1] > 0) cell.classList.add('run-r')
+        if (streak.keys.has(keys[i])) cell.classList.add('is-live')
+      }
       strip.appendChild(cell)
+    })
+    track.appendChild(strip)
+
+    // the number is the thing you don't want to reset
+    if (streak.length >= 2) {
+      const badge = document.createElement('span')
+      badge.className = 'streak-badge'
+      badge.textContent = String(streak.length)
+      badge.title = `${streak.length}-day streak`
+      track.appendChild(badge)
     }
-    return strip
+    return track
   }
 
   private renderList(entries: Entry[]) {

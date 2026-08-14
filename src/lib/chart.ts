@@ -38,6 +38,32 @@ export function localDateString(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+// The run of consecutive days ending today — or ending yesterday, while today is
+// still open. This is the streak you'd break, which is the one worth showing.
+export function currentStreak(days: Map<string, number> | undefined): {
+  length: number
+  keys: Set<string>
+} {
+  const keys = new Set<string>()
+  const cursor = new Date()
+  cursor.setHours(0, 0, 0, 0)
+  if ((days?.get(localDateString(cursor)) ?? 0) === 0) cursor.setDate(cursor.getDate() - 1)
+  while ((days?.get(localDateString(cursor)) ?? 0) > 0) {
+    keys.add(localDateString(cursor))
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return { length: keys.size, keys }
+}
+
+// escalating emphasis: the longer the run, the more it glows and the more it costs to lose
+export function streakTier(length: number): number {
+  if (length < 2) return 0
+  if (length < 4) return 1
+  if (length < 7) return 2
+  if (length < 14) return 3
+  return 4
+}
+
 export function formatDay(date: string): string {
   const [year, month, day] = date.split('-').map(Number)
   return new Date(year, month - 1, day).toLocaleDateString(undefined, {

@@ -1,5 +1,11 @@
 import { Controller } from '@hotwired/stimulus'
-import { assignSeriesClasses, formatDay, localDateString } from '../lib/chart'
+import {
+  assignSeriesClasses,
+  currentStreak,
+  formatDay,
+  localDateString,
+  streakTier,
+} from '../lib/chart'
 import { RING_ACTIVITIES } from '../lib/config'
 import type { Activity, Best, Stats } from '../types'
 
@@ -110,11 +116,14 @@ export default class ChartController extends Controller {
     row: HTMLElement,
     keys: string[],
     make: (key: string, index: number) => HTMLElement,
+    // a run that spans Saturday→Sunday must survive the week gap, or every
+    // streak looks broken once a week
+    bridgeAt?: (index: number) => boolean,
   ) {
     keys.forEach((key, index) => {
       if (index > 0 && ChartController.dayOfWeek(key) === 0) {
         const gap = document.createElement('span')
-        gap.className = 'mx-gap'
+        gap.className = bridgeAt?.(index) ? 'mx-gap is-bridge' : 'mx-gap'
         row.appendChild(gap)
       }
       row.appendChild(make(key, index))
@@ -138,8 +147,12 @@ export default class ChartController extends Controller {
       // only the single best day is marked; ties would scatter the badge
       const bestDay = this.best.get(activity.id)?.day
 
+      const streak = currentStreak(days)
+      const tier = streakTier(streak.length)
+
       const row = document.createElement('div')
       row.className = `mx-row mx-activity ${this.colors.get(activity.id) ?? 'chart-s-other'}`
+      if (tier > 0) row.classList.add(`streak-t${tier}`)
       if (this.expandedId === activity.id) row.classList.add('is-open')
       row.dataset.action = 'click->chart#toggleRow'
       row.dataset.chartIdParam = activity.id
@@ -149,24 +162,35 @@ export default class ChartController extends Controller {
       label.textContent = activity.name // user-named — textContent, never innerHTML
       row.appendChild(label)
 
-      this.appendCells(row, keys, (key, i) => {
-        const amount = amounts[i]
-        const cell = document.createElement('span')
-        if (amount === 0) {
-          cell.className = 'mx-cell off'
-        } else if (activity.kind === 'habit') {
-          cell.className = 'mx-cell lvl-3'
-        } else {
-          const ratio = amount / max
-          cell.className = `mx-cell lvl-${ratio < 0.5 ? 1 : ratio < 0.85 ? 2 : 3}`
-          if (key === bestDay) cell.classList.add('is-record')
-        }
-        cell.dataset.tip =
-          activity.kind === 'habit'
-            ? `${formatDay(key)} · ${amount > 0 ? 'done' : 'not done'} · ${activity.name}`
-            : `${formatDay(key)} · ${amount} ${activity.unit} · ${activity.name}`
-        return cell
-      })
+      this.appendCells(
+        row,
+        keys,
+        (key, i) => {
+          const amount = amounts[i]
+          const cell = document.createElement('span')
+          if (amount === 0) {
+            cell.className = 'mx-cell off'
+          } else if (activity.kind === 'habit') {
+            cell.className = 'mx-cell lvl-3'
+          } else {
+            const ratio = amount / max
+            cell.className = `mx-cell lvl-${ratio < 0.5 ? 1 : ratio < 0.85 ? 2 : 3}`
+            if (key === bestDay) cell.classList.add('is-record')
+          }
+          // square the joined edges so a run reads as one continuous capsule
+          if (amount > 0) {
+            if (amounts[i - 1] > 0) cell.classList.add('run-l')
+            if (amounts[i + 1] > 0) cell.classList.add('run-r')
+            if (streak.keys.has(key)) cell.classList.add('is-live')
+          }
+          cell.dataset.tip =
+            activity.kind === 'habit'
+              ? `${formatDay(key)} · ${amount > 0 ? 'done' : 'not done'} · ${activity.name}`
+              : `${formatDay(key)} · ${amount} ${activity.unit} · ${activity.name}`
+          return cell
+        },
+        (i) => amounts[i] > 0 && amounts[i - 1] > 0,
+      )
 
       rows.push(row)
       if (this.expandedId === activity.id) rows.push(this.buildDetail(activity, keys, amounts))

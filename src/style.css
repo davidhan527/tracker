@@ -655,26 +655,90 @@ button.quick {
   flex-shrink: 0;
 }
 
-/* opaque steps rather than opacity, which composites toward the page */
+/* level lives on `color` so a run's bridge can inherit the exact same value */
+.strip-cell,
+.mx-cell {
+  background: currentColor;
+  position: relative;
+}
+
 .strip-cell.lvl-1,
 .mx-cell.lvl-1 {
-  background: color-mix(in oklab, var(--series-color) 38%, var(--surface));
+  color: color-mix(in oklab, var(--series-color) 38%, var(--surface));
 }
 
 .strip-cell.lvl-2,
 .mx-cell.lvl-2 {
-  background: color-mix(in oklab, var(--series-color) 68%, var(--surface));
+  color: color-mix(in oklab, var(--series-color) 68%, var(--surface));
 }
 
 .strip-cell.lvl-3,
 .mx-cell.lvl-3 {
-  background: var(--series-color);
+  color: var(--series-color);
 }
 
 .strip-cell.off,
 .mx-cell.off {
-  background: var(--grid-empty);
-  border: none;
+  color: var(--grid-empty);
+}
+
+/* consecutive days fuse into one capsule — a broken streak visibly snaps apart */
+.strip-cell.run-l,
+.mx-cell.run-l {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.strip-cell.run-r,
+.mx-cell.run-r {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.strip-cell.run-r::after,
+.mx-cell.run-r::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 2px;
+  background: currentColor;
+}
+
+/* a run spanning Saturday into Sunday has to cross the week gap */
+.mx-gap.is-bridge {
+  height: 14px;
+  background: var(--series-color);
+}
+
+/* in a 7px strip a dim day reads as a break, so live-run cells get a floor —
+   the matrix keeps the full range, since that is where magnitude is the point */
+.strip-cell.is-live.lvl-1 {
+  color: color-mix(in oklab, var(--series-color) 62%, var(--surface));
+}
+
+/* the live streak glows, and the glow grows with the run */
+.streak-t1 .is-live {
+  filter: drop-shadow(0 0 1px var(--series-color));
+}
+
+.streak-t2 .is-live {
+  filter: drop-shadow(0 0 2.5px var(--series-color));
+}
+
+.streak-t3 .is-live {
+  filter: drop-shadow(0 0 4px var(--series-color)) saturate(1.15);
+}
+
+.streak-t4 .is-live {
+  filter: drop-shadow(0 0 6px var(--series-color)) saturate(1.3);
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .strip {
@@ -686,6 +750,31 @@ button.quick {
   width: 7px;
   height: 16px;
   border-radius: 2px;
+}
+
+.streak-badge {
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: var(--fs-0);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--series-color);
+  background: color-mix(in oklab, var(--series-color) 16%, var(--surface));
+}
+
+/* past a week the badge stops being a note and becomes a trophy */
+.streak-t3 .streak-badge,
+.streak-t4 .streak-badge {
+  color: var(--accent-text);
+  background: var(--series-color);
+}
+
+.streak-t4 .streak-badge {
+  box-shadow: 0 0 10px color-mix(in oklab, var(--series-color) 65%, transparent);
 }
 
 /* --- matrix ------------------------------------------------------------ */
