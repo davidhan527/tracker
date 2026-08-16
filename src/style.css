@@ -110,6 +110,12 @@
   box-sizing: border-box;
 }
 
+/* the [hidden] attribute is only a UA `display: none`, so ANY author rule that
+   sets display silently defeats it — this keeps the attribute authoritative */
+[hidden] {
+  display: none !important;
+}
+
 html {
   background: var(--bg);
 }
