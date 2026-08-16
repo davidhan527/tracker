@@ -2,14 +2,17 @@
 
 // Concentric ring lineup, outermost first, matched by exact activity name.
 // An activity that doesn't exist yet simply has no ring.
-export const RING_ACTIVITIES = ['Bible', 'Pushups', 'Chin-ups']
+// Chin-ups parked 2026-08-16 to rest a tennis elbow — to bring it back, add
+// 'Chin-ups' here and drop it from HERO_EXCLUDED.
+export const RING_ACTIVITIES = ['Bible', 'Pushups']
 
 // Tracked, but never a headline: no ring, no hero row, no nudge.
 // Still present in the matrix, the recent list and the log sheet.
-export const HERO_EXCLUDED = ['Pickleball']
+export const HERO_EXCLUDED = ['Pickleball', 'Chin-ups']
 
 // Recovery rules: the day after `habit` is done, `skip` disappears from the
 // hero entirely — rings, rows and nudges. (Pickleball flares up tennis elbow.)
+// Inert while Chin-ups is hero-excluded; kept ready for when it returns.
 export const REST_AFTER = [{ skip: 'Chin-ups', habit: 'Pickleball' }]
 
 // Pin an activity to a specific palette slot (1-7). Everything else takes the
