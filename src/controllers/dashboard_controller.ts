@@ -169,7 +169,7 @@ export default class DashboardController extends Controller {
 
     // the matrix reads the same aggregation rather than fetching its own copy
     window.dispatchEvent(
-      new CustomEvent('stats:changed', { detail: { perDay, best: this.best } }),
+      new CustomEvent('stats:changed', { detail: { perDay, best: this.best, entries } }),
     )
 
     this.renderRingCluster(perDay)

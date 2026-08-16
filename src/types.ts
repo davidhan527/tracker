@@ -14,10 +14,11 @@ export interface Best {
   amount: number
 }
 
-// derived once by the dashboard and broadcast, so both cards share one fetch
+// derived once by the dashboard and broadcast, so every card shares one fetch
 export interface Stats {
   perDay: Map<string, Map<string, number>> // activityId -> day -> total
   best: Map<string, Best> // activityId -> all-time best day
+  entries: Entry[] // raw rows, for anything that needs individual amounts
 }
 
 // unified client-side view over the three entry tables

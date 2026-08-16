@@ -292,6 +292,35 @@ button.danger {
   color: var(--danger);
 }
 
+/* learned from the last two weeks: the amounts you actually reach for */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+button.suggest-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 999px;
+  border-color: transparent;
+  background: color-mix(in oklab, var(--series-color) 18%, var(--surface));
+}
+
+.suggest-amount {
+  font-size: var(--fs-2);
+  font-weight: 700;
+  color: var(--series-color);
+}
+
+.suggest-name {
+  font-size: var(--fs-1);
+  color: var(--text);
+}
+
 .quick-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
