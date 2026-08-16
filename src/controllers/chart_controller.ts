@@ -29,11 +29,17 @@ export default class ChartController extends Controller {
   private best = new Map<string, Best>()
   private hasData = false
   private expandedId: string | null = null
+  private lastWidth = 0
+  private observer?: ResizeObserver
 
   connect() {
     window.addEventListener('activities:changed', this.onActivities)
     window.addEventListener('stats:changed', this.onStats)
-    window.addEventListener('resize', this.onResize)
+    // the card can receive data while #app is still hidden (width 0) during the
+    // boot race; a width observer re-renders the moment it becomes measurable,
+    // where a plain resize listener would leave the matrix blank forever
+    this.observer = new ResizeObserver(() => this.onResize())
+    this.observer.observe(this.containerTarget)
     // touch devices get tap-to-expand instead; a hover tooltip there fights the tap
     if (window.matchMedia('(hover: hover)').matches) {
       this.containerTarget.addEventListener('pointerover', this.onPointer)
@@ -44,7 +50,7 @@ export default class ChartController extends Controller {
   disconnect() {
     window.removeEventListener('activities:changed', this.onActivities)
     window.removeEventListener('stats:changed', this.onStats)
-    window.removeEventListener('resize', this.onResize)
+    this.observer?.disconnect()
   }
 
   toggleRow(event: Event) {
@@ -70,7 +76,9 @@ export default class ChartController extends Controller {
   }
 
   private onResize = () => {
-    if (this.hasData) this.render()
+    const width = this.containerTarget.clientWidth
+    if (width === 0 || width === this.lastWidth) return
+    if (this.hasData && this.activities.length > 0) this.render()
   }
 
   // rings first, in ring order, so the matrix mirrors the hero card
@@ -131,7 +139,8 @@ export default class ChartController extends Controller {
   }
 
   private render() {
-    if (this.containerTarget.clientWidth === 0) return
+    if (this.containerTarget.clientWidth === 0) return // the observer will call back
+    this.lastWidth = this.containerTarget.clientWidth
     const keys = this.windowKeys()
     this.headingTarget.textContent = `Last ${keys.length} days`
 

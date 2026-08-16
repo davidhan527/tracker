@@ -26,6 +26,7 @@ export default class DashboardController extends Controller {
     'recap',
     'recapRows',
     'recapLead',
+    'error',
   ]
 
   declare readonly nudgeTarget: HTMLElement
@@ -38,6 +39,7 @@ export default class DashboardController extends Controller {
   declare readonly recapTarget: HTMLElement
   declare readonly recapRowsTarget: HTMLElement
   declare readonly recapLeadTarget: HTMLElement
+  declare readonly errorTarget: HTMLElement
 
   private activities: Activity[] = []
   private byId = new Map<string, Activity>()
@@ -121,8 +123,19 @@ export default class DashboardController extends Controller {
 
     // a slow response must never overwrite a newer one
     const generation = ++this.generation
-    const [entries, recent] = await Promise.all([allEntries(), recentEntries(RECENT_LIMIT)])
+    let entries: Entry[]
+    let recent: Entry[]
+    try {
+      ;[entries, recent] = await this.fetchWithRetry()
+    } catch (error) {
+      if (generation !== this.generation) return
+      // an empty dashboard and a failed fetch look identical — say which it is
+      this.errorTarget.textContent = `Couldn't load your data — tap to retry (${(error as Error).message})`
+      this.errorTarget.hidden = false
+      return
+    }
     if (generation !== this.generation) return
+    this.errorTarget.hidden = true
 
     // per-activity, per-day totals: one aggregation feeds rings, rows, strips,
     // streaks, records and the matrix — the whole app reads from this
@@ -167,6 +180,21 @@ export default class DashboardController extends Controller {
     this.primed = true
     this.renderedDay = todayKey
     this.armMidnight()
+  }
+
+  retry() {
+    void this.refresh()
+  }
+
+  // a cold start can race the token refresh and 401 once; one quiet retry
+  // covers that without the user ever seeing a failure
+  private async fetchWithRetry(): Promise<[Entry[], Entry[]]> {
+    try {
+      return await Promise.all([allEntries(), recentEntries(RECENT_LIMIT)])
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+      return await Promise.all([allEntries(), recentEntries(RECENT_LIMIT)])
+    }
   }
 
   private dayKey(offset: number): string {

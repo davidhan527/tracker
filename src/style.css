@@ -119,6 +119,8 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
+  /* the app owns the overscroll gesture, so the page must not rubber-band */
+  overscroll-behavior-y: contain;
   padding: calc(var(--sp-4) + env(safe-area-inset-top)) var(--sp-4)
     calc(6.5rem + env(safe-area-inset-bottom));
 }
@@ -615,6 +617,82 @@ button.quick {
 
 .today-count {
   transform-origin: right center;
+}
+
+/* --- loading, refresh and failure states -------------------------------- */
+
+.booting {
+  display: grid;
+  place-items: center;
+  padding-top: 30vh;
+}
+
+.pull-indicator {
+  position: fixed;
+  top: calc(-2.5rem + env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  height: 2.5rem;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+}
+
+.pull-indicator.is-pulling,
+.pull-indicator.is-loading {
+  opacity: 1;
+}
+
+.pull-indicator.is-pulling {
+  transition: none;
+}
+
+.pull-indicator.is-loading,
+.pull-indicator:not(.is-pulling) {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+.pull-spinner {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
+}
+
+.is-ready .pull-spinner {
+  border-top-color: var(--state-ahead);
+}
+
+.booting .pull-spinner,
+.is-loading .pull-spinner {
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* a failed fetch and a genuinely empty day must never look the same */
+.data-error {
+  display: block;
+  width: 100%;
+  margin: var(--sp-4) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: none;
+  border-left: 3px solid var(--danger);
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+  background: color-mix(in oklab, var(--danger) 12%, var(--surface));
+  color: var(--text);
+  font-size: var(--fs-1);
+  font-weight: 500;
+  text-align: left;
 }
 
 .nudge {

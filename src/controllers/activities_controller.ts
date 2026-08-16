@@ -24,6 +24,7 @@ export default class ActivitiesController extends Controller {
 
   connect() {
     window.addEventListener('session:changed', this.onSession)
+    window.addEventListener('data:refresh', this.onRefreshRequested)
     this.kindChanged()
     // connect() can run before or after the client emits INITIAL_SESSION, so also pull
     void supabase.auth.getSession().then(({ data }) => this.handleSession(data.session))
@@ -31,6 +32,13 @@ export default class ActivitiesController extends Controller {
 
   disconnect() {
     window.removeEventListener('session:changed', this.onSession)
+    window.removeEventListener('data:refresh', this.onRefreshRequested)
+  }
+
+  // pull-to-refresh reloads from the top of the chain, so activities and every
+  // downstream card refetch together
+  private onRefreshRequested = () => {
+    if (this.userId) void this.load()
   }
 
   select() {

@@ -10,6 +10,10 @@
     <title>Rep Tracker</title>
   </head>
   <body>
+    <div id="pull-indicator" class="pull-indicator" aria-hidden="true"><span class="pull-spinner"></span></div>
+
+    <div id="booting" class="booting" role="status" aria-label="Loading"><span class="pull-spinner"></span></div>
+
     <section id="auth" data-controller="auth" hidden>
       <div class="card auth-card">
         <h1>Rep Tracker</h1>
@@ -55,6 +59,13 @@
             <div class="today-rows" data-dashboard-target="today"></div>
           </div>
           <p class="nudge" data-dashboard-target="nudge" hidden></p>
+          <button
+            type="button"
+            class="data-error"
+            data-dashboard-target="error"
+            data-action="dashboard#retry"
+            hidden
+          ></button>
         </section>
 
         <section class="card recap-card" data-dashboard-target="recap" hidden>

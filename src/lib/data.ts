@@ -103,6 +103,13 @@ function toEntry(kind: Kind, row: Raw): Entry {
   }
 }
 
+// A failed query must never look like a day with nothing logged, so these throw
+// rather than coalescing to []. The caller decides what to show.
+function assertOk(results: { error: { message: string } | null }[]) {
+  const failed = results.find((result) => result.error)
+  if (failed?.error) throw new Error(failed.error.message)
+}
+
 export async function entriesSince(since: Date): Promise<Entry[]> {
   const sinceDay = localDateString(since)
   const [exercises, books, habits] = await Promise.all([
@@ -110,6 +117,7 @@ export async function entriesSince(since: Date): Promise<Entry[]> {
     supabase.from('book_entries').select('*').gte('created_at', since.toISOString()),
     supabase.from('habit_entries').select('*').gte('done_on', sinceDay),
   ])
+  assertOk([exercises, books, habits])
   return [
     ...((exercises.data ?? []) as Raw[]).map((row) => toEntry('exercise', row)),
     ...((books.data ?? []) as Raw[]).map((row) => toEntry('book', row)),
@@ -129,6 +137,7 @@ export async function recentEntries(limit: number): Promise<Entry[]> {
       supabase.from(ENTRY[kind].table).select('*').order('created_at', { ascending: false }).limit(limit),
     ),
   )
+  assertOk(results)
   return KINDS.flatMap((kind, i) => ((results[i].data ?? []) as Raw[]).map((row) => toEntry(kind, row)))
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, limit)
