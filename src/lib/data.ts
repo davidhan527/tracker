@@ -2,6 +2,7 @@
 // tables) fully separate; this module merges them into the unified Activity /
 // Entry shapes the UI works with, and routes writes to the right table.
 import { localDateString } from './chart'
+import { ARCHIVED } from './config'
 import { supabase } from './supabase'
 import type { Activity, Entry, Kind } from '../types'
 
@@ -44,9 +45,11 @@ export async function loadActivities(): Promise<{ activities: Activity[]; error:
   const failed = results.find((result) => result.error)
   if (failed?.error) return { activities: [], error: failed.error.message }
 
+  // dropping archived names here is what removes them from every widget at once;
+  // their rows stay in the database, so un-archiving restores the full history
   const activities = KINDS.flatMap((kind, i) =>
     ((results[i].data ?? []) as Raw[]).map((row) => toActivity(kind, row)),
-  )
+  ).filter((activity) => !ARCHIVED.includes(activity.name))
   // global creation order keeps series-color slots stable across kinds
   activities.sort((a, b) => a.created_at.localeCompare(b.created_at))
   return { activities, error: null }

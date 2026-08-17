@@ -150,7 +150,8 @@ export default class DashboardController extends Controller {
     this.best = new Map()
     this.records = new Set()
     for (const [id, days] of perDay) {
-      if (this.byId.get(id)?.kind === 'habit') continue // a habit day is always 1
+      const activity = this.byId.get(id)
+      if (!activity || activity.kind === 'habit') continue // archived, or always 1
       let best: Best | null = null
       let bestBefore = 0
       for (const [day, amount] of days) {
@@ -512,8 +513,10 @@ export default class DashboardController extends Controller {
   }
 
   private renderList(entries: Entry[]) {
-    this.emptyTarget.hidden = entries.length > 0
-    this.listTarget.replaceChildren(...entries.map((entry) => this.renderEntry(entry)))
+    // an archived activity is no longer in byId, so its old entries drop out too
+    const visible = entries.filter((entry) => this.byId.has(entry.activity_id))
+    this.emptyTarget.hidden = visible.length > 0
+    this.listTarget.replaceChildren(...visible.map((entry) => this.renderEntry(entry)))
   }
 
   private renderEntry(entry: Entry): HTMLLIElement {
