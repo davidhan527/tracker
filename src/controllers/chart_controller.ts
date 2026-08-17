@@ -295,6 +295,7 @@ export default class ChartController extends Controller {
     if (best && activity.kind !== 'habit') {
       chips.push(['Best', `${best.amount} on ${formatDay(best.day)}`])
     }
+    if (activity.author) chips.push(['By', activity.author])
 
     for (const [label, value] of chips) {
       const chip = document.createElement('span')

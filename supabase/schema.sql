@@ -15,7 +15,10 @@ create table public.books (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
+  author text check (author is null or char_length(author) between 1 and 120),
   unit text not null default 'pages' check (unit in ('pages', 'chapters')),
+  -- set when you finish it: the book leaves every widget but keeps its history
+  finished_on date,
   created_at timestamptz not null default now(),
   unique (user_id, name)
 );
@@ -101,3 +104,7 @@ create policy "own rows" on public.habit_entries for all using (auth.uid() = use
 -- 2026-08: books grew a unit (pages/chapters) and book_entries.pages became amount:
 -- alter table public.books add column unit text not null default 'pages' check (unit in ('pages', 'chapters'));
 -- alter table public.book_entries rename column pages to amount;
+--
+-- 2026-08-17: books grew an author and a finished date:
+-- alter table public.books add column author text check (author is null or char_length(author) between 1 and 120);
+-- alter table public.books add column finished_on date;

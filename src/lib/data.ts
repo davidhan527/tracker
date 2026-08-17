@@ -35,35 +35,58 @@ function toActivity(kind: Kind, row: Raw): Activity {
     unit,
     kind,
     created_at: row.created_at as string,
+    author: (row.author as string) ?? undefined,
+    finishedOn: (row.finished_on as string) ?? null,
   }
 }
 
-export async function loadActivities(): Promise<{ activities: Activity[]; error: string | null }> {
+export async function loadActivities(): Promise<{
+  activities: Activity[]
+  finished: Activity[]
+  error: string | null
+}> {
   const results = await Promise.all(
     KINDS.map((kind) => supabase.from(ACTIVITY_TABLE[kind]).select('*')),
   )
   const failed = results.find((result) => result.error)
-  if (failed?.error) return { activities: [], error: failed.error.message }
+  if (failed?.error) return { activities: [], finished: [], error: failed.error.message }
 
-  // dropping archived names here is what removes them from every widget at once;
-  // their rows stay in the database, so un-archiving restores the full history
-  const activities = KINDS.flatMap((kind, i) =>
+  const all = KINDS.flatMap((kind, i) =>
     ((results[i].data ?? []) as Raw[]).map((row) => toActivity(kind, row)),
-  ).filter((activity) => !ARCHIVED.includes(activity.name))
+  )
   // global creation order keeps series-color slots stable across kinds
-  activities.sort((a, b) => a.created_at.localeCompare(b.created_at))
-  return { activities, error: null }
+  all.sort((a, b) => a.created_at.localeCompare(b.created_at))
+
+  // dropping names here is what removes them from every widget at once; the rows
+  // stay in the database, so archiving and finishing are both fully reversible
+  const live = all.filter(
+    (activity) => !ARCHIVED.includes(activity.name) && !activity.finishedOn,
+  )
+  const finished = all.filter((activity) => activity.finishedOn)
+  finished.sort((a, b) => (b.finishedOn ?? '').localeCompare(a.finishedOn ?? ''))
+  return { activities: live, finished, error: null }
 }
 
 export async function createActivity(
   kind: Kind,
   name: string,
   unit: string,
+  author?: string,
 ): Promise<{ activity: Activity | null; error: { code?: string; message: string } | null }> {
   const row: Raw = kind === 'habit' ? { name } : { name, unit }
+  if (kind === 'book' && author) row.author = author
   const { data, error } = await supabase.from(ACTIVITY_TABLE[kind]).insert(row).select().single()
   if (error) return { activity: null, error }
   return { activity: toActivity(kind, data as Raw), error: null }
+}
+
+// null reopens it. Kept reversible so a mistap is never a dead end.
+export async function setBookFinished(
+  id: string,
+  day: string | null,
+): Promise<string | null> {
+  const { error } = await supabase.from('books').update({ finished_on: day }).eq('id', id)
+  return error?.message ?? null
 }
 
 // pastDay: YYYY-MM-DD when backdating. Habits are idempotent per day at the DB

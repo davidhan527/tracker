@@ -1,6 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
-import { assignSeriesClasses, localDateString } from '../lib/chart'
-import { logEntry } from '../lib/data'
+import { assignSeriesClasses, formatDay, localDateString } from '../lib/chart'
+import { logEntry, setBookFinished } from '../lib/data'
 import { suggestQuickActions } from '../lib/suggest'
 import type { Activity, Stats } from '../types'
 
@@ -16,6 +16,9 @@ export default class LoggerController extends Controller {
     'counted',
     'habitButton',
     'suggestions',
+    'finishBook',
+    'finishedWrap',
+    'finishedList',
   ]
 
   declare readonly inputTarget: HTMLInputElement
@@ -25,6 +28,9 @@ export default class LoggerController extends Controller {
   declare readonly countedTarget: HTMLElement
   declare readonly habitButtonTarget: HTMLButtonElement
   declare readonly suggestionsTarget: HTMLElement
+  declare readonly finishBookTarget: HTMLButtonElement
+  declare readonly finishedWrapTarget: HTMLElement
+  declare readonly finishedListTarget: HTMLElement
 
   private activity: Activity | null = null
   private activities: Activity[] = []
@@ -69,6 +75,66 @@ export default class LoggerController extends Controller {
       }),
     )
     this.suggestionsTarget.hidden = suggestions.length === 0
+  }
+
+  // finishing retires the book from every widget; reopening brings it all back
+  async finishBook() {
+    const activity = this.activity
+    if (activity?.kind !== 'book') return
+    this.setBusy(true)
+    const error = await setBookFinished(activity.id, localDateString(new Date()))
+    this.setBusy(false)
+    if (error) {
+      this.statusTarget.textContent = `Could not finish: ${error}`
+      return
+    }
+    this.statusTarget.textContent = `Finished ${activity.name} — nice one`
+    window.dispatchEvent(new CustomEvent('data:refresh'))
+  }
+
+  async reopenBook(event: Event) {
+    const { id } = (event as unknown as { params: { id: string } }).params
+    this.setBusy(true)
+    const error = await setBookFinished(id, null)
+    this.setBusy(false)
+    if (error) {
+      this.statusTarget.textContent = `Could not reopen: ${error}`
+      return
+    }
+    this.statusTarget.textContent = 'Reopened — back in your widgets'
+    window.dispatchEvent(new CustomEvent('data:refresh'))
+  }
+
+  private renderFinished(finished: Activity[]) {
+    this.finishedWrapTarget.hidden = finished.length === 0
+    this.finishedListTarget.replaceChildren(
+      ...finished.map((book) => {
+        const row = document.createElement('div')
+        row.className = 'finished-row'
+
+        const meta = document.createElement('div')
+        meta.className = 'finished-meta'
+        const title = document.createElement('p')
+        title.className = 'finished-title'
+        title.textContent = book.name // user-supplied — textContent, never innerHTML
+        const sub = document.createElement('p')
+        sub.className = 'finished-sub'
+        sub.textContent = [book.author, book.finishedOn ? formatDay(book.finishedOn) : null]
+          .filter(Boolean)
+          .join(' · ')
+        meta.append(title, sub)
+
+        const reopen = document.createElement('button')
+        reopen.type = 'button'
+        reopen.className = 'ghost'
+        reopen.textContent = 'Reopen'
+        reopen.dataset.action = 'logger#reopenBook'
+        reopen.dataset.loggerIdParam = book.id
+
+        row.append(meta, reopen)
+        return row
+      }),
+    )
   }
 
   logSuggestion(event: Event) {
@@ -123,7 +189,13 @@ export default class LoggerController extends Controller {
   }
 
   private onActivities = (event: Event) => {
-    const detail = (event as CustomEvent<{ activities: Activity[]; selectedId: string | null }>).detail
+    const detail = (
+      event as CustomEvent<{
+        activities: Activity[]
+        finished?: Activity[]
+        selectedId: string | null
+      }>
+    ).detail
     this.activities = detail.activities
     this.activity = detail.activities.find((candidate) => candidate.id === detail.selectedId) ?? null
     // the quick buttons wear the selected activity's colour, so the sheet always
@@ -135,6 +207,11 @@ export default class LoggerController extends Controller {
     const isHabit = this.activity?.kind === 'habit'
     this.countedTarget.hidden = isHabit
     this.habitButtonTarget.hidden = !isHabit
+    this.finishBookTarget.hidden = this.activity?.kind !== 'book'
+    if (this.activity?.kind === 'book') {
+      this.finishBookTarget.textContent = `Mark “${this.activity.name}” finished`
+    }
+    this.renderFinished(detail.finished ?? [])
     const unit = this.activity?.unit ?? 'reps'
     const label = unit.charAt(0).toUpperCase() + unit.slice(1)
     this.inputTarget.placeholder = label

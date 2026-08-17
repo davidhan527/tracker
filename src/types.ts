@@ -7,6 +7,8 @@ export interface Activity {
   unit: string // exercises: reps/minutes/km; books: pages; habits: days
   kind: Kind
   created_at: string
+  author?: string // books only
+  finishedOn?: string | null // books only: YYYY-MM-DD once finished
 }
 
 export interface Best {

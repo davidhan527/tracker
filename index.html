@@ -145,6 +145,14 @@
             Mark today done ✓
           </button>
 
+          <button
+            type="button"
+            class="ghost finish-book"
+            data-logger-target="finishBook"
+            data-action="logger#finishBook"
+            hidden
+          ></button>
+
           <details
             class="backdate"
             data-logger-target="details"
@@ -156,6 +164,11 @@
             <p class="muted small">While a date is set, every log above is saved to that day.</p>
           </details>
           <p class="status" role="status" data-logger-target="status"></p>
+
+          <details class="backdate" data-logger-target="finishedWrap" hidden>
+            <summary>Finished books</summary>
+            <div class="finished-list" data-logger-target="finishedList"></div>
+          </details>
         </section>
 
         <details class="backdate">
@@ -169,6 +182,14 @@
               required
               aria-label="Name"
               data-activities-target="name"
+            />
+            <input
+              type="text"
+              maxlength="120"
+              placeholder="Author"
+              aria-label="Author"
+              data-activities-target="author"
+              hidden
             />
             <div class="inline-form">
               <select

@@ -11,15 +11,17 @@ const UNIT_OPTIONS: Record<string, string[]> = {
 }
 
 export default class ActivitiesController extends Controller {
-  static targets = ['picker', 'name', 'unit', 'kind', 'status']
+  static targets = ['picker', 'name', 'unit', 'kind', 'status', 'author']
 
   declare readonly pickerTarget: HTMLSelectElement
   declare readonly nameTarget: HTMLInputElement
   declare readonly unitTarget: HTMLSelectElement
   declare readonly kindTarget: HTMLSelectElement
   declare readonly statusTarget: HTMLElement
+  declare readonly authorTarget: HTMLInputElement
 
   private activities: Activity[] = []
+  private finished: Activity[] = []
   private userId: string | null = null
 
   connect() {
@@ -48,6 +50,7 @@ export default class ActivitiesController extends Controller {
   // each kind offers its own units; habits are yes/no days with no choice
   kindChanged() {
     const units = UNIT_OPTIONS[this.kindTarget.value] ?? []
+    this.authorTarget.hidden = this.kindTarget.value !== 'book'
     this.unitTarget.hidden = units.length === 0
     this.unitTarget.replaceChildren(
       ...units.map((unit) => {
@@ -67,16 +70,24 @@ export default class ActivitiesController extends Controller {
     this.statusTarget.textContent = ''
     const kind = (this.kindTarget.value || 'exercise') as Kind
     const fallback = UNIT_OPTIONS[kind]?.[0] ?? 'reps'
-    const { activity, error } = await createActivity(kind, name, this.unitTarget.value || fallback)
+    const { activity, error } = await createActivity(
+      kind,
+      name,
+      this.unitTarget.value || fallback,
+      this.authorTarget.value.trim() || undefined,
+    )
     if (error || !activity) {
       this.statusTarget.textContent =
         error?.code === '23505'
           ? 'You are already tracking that.'
-          : `Could not add: ${error?.message ?? 'unknown error'}`
+          : error?.code === 'PGRST204'
+            ? 'Run the author/finished_on migration from supabase/schema.sql first.'
+            : `Could not add: ${error?.message ?? 'unknown error'}`
       return
     }
 
     this.nameTarget.value = ''
+    this.authorTarget.value = ''
     this.activities = [...this.activities, activity]
     this.render(activity.id)
   }
@@ -94,25 +105,30 @@ export default class ActivitiesController extends Controller {
   }
 
   private async load() {
-    const { activities, error } = await loadActivities()
+    const { activities, finished, error } = await loadActivities()
     if (error) {
       this.statusTarget.textContent = `Could not load activities: ${error}`
       return
     }
 
     let items = activities
-    if (items.length === 0) {
+    // an account whose only books are finished still counts as set up
+    if (items.length === 0 && finished.length === 0) {
       // first run for this account; unique(user_id, name) makes a duplicate insert harmless
       const seeded = await createActivity('exercise', 'Pushups', 'reps')
       if (seeded.activity) items = [seeded.activity]
     }
 
     this.activities = items
-    this.render(items[0]?.id)
+    this.finished = finished
+    // keep the current selection across a reload where possible
+    const keep = this.pickerTarget.value
+    this.render(items.some((item) => item.id === keep) ? keep : items[0]?.id)
   }
 
   private clear() {
     this.activities = []
+    this.finished = []
     this.pickerTarget.replaceChildren()
     this.broadcast()
   }
@@ -133,7 +149,11 @@ export default class ActivitiesController extends Controller {
   private broadcast() {
     window.dispatchEvent(
       new CustomEvent('activities:changed', {
-        detail: { activities: this.activities, selectedId: this.pickerTarget.value || null },
+        detail: {
+          activities: this.activities,
+          finished: this.finished,
+          selectedId: this.pickerTarget.value || null,
+        },
       }),
     )
   }
